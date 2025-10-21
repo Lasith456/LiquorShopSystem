@@ -1,74 +1,92 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="row">
-    <div class="col-lg-12 margin-tb">
-        <div class="pull-left">
-            <h2>Edit User</h2>
-        </div>
-        <div class="pull-right">
-            <a class="btn btn-primary btn-sm mb-2" href="{{ route('users.index') }}"><i class="fa fa-arrow-left"></i> Back</a>
-        </div>
+<div class="max-w-3xl mx-auto px-6 py-8">
+    {{-- Header --}}
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+            <i class="fa-solid fa-user-pen text-blue-600"></i> Edit User
+        </h2>
+        <a href="{{ route('users.index') }}"
+           class="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg shadow transition transform hover:-translate-y-0.5">
+           <i class="fa fa-arrow-left"></i> Back
+        </a>
     </div>
-</div>
 
-@if (count($errors) > 0)
-    <div class="alert alert-danger">
-      <strong>Whoops!</strong> There were some problems with your input.<br><br>
-      <ul>
-         @foreach ($errors->all() as $error)
-           <li>{{ $error }}</li>
-         @endforeach
-      </ul>
-    </div>
-@endif
+    {{-- Validation Errors --}}
+    @if ($errors->any())
+        <div class="mb-6 bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg text-sm">
+            <strong class="font-semibold">Whoops!</strong> There were some problems with your input:
+            <ul class="list-disc pl-5 mt-2">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
 
-<form method="POST" action="{{ route('users.update', $user->id) }}">
-    @csrf
-    @method('PUT')
+    {{-- Edit Form Card --}}
+    <div class="bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-8 border border-gray-200 dark:border-gray-700">
+        <form method="POST" action="{{ route('users.update', $user->id) }}" class="space-y-5">
+            @csrf
+            @method('PUT')
 
-    <div class="row">
-        <div class="col-xs-12 col-sm-12 col-md-12">
-            <div class="form-group">
-                <strong>Name:</strong>
-                <input type="text" name="name" placeholder="Name" class="form-control" value="{{ $user->name }}">
+            {{-- Name --}}
+            <div>
+                <label for="name" class="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Name</label>
+                <input type="text" id="name" name="name" value="{{ $user->name }}" placeholder="Enter name"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
             </div>
-        </div>
-        <div class="col-xs-12 col-sm-12 col-md-12">
-            <div class="form-group">
-                <strong>Email:</strong>
-                <input type="email" name="email" placeholder="Email" class="form-control" value="{{ $user->email }}">
+
+            {{-- Email --}}
+            <div>
+                <label for="email" class="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Email</label>
+                <input type="email" id="email" name="email" value="{{ $user->email }}" placeholder="Enter email"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
             </div>
-        </div>
-        <div class="col-xs-12 col-sm-12 col-md-12">
-            <div class="form-group">
-                <strong>Password:</strong>
-                <input type="password" name="password" placeholder="Password" class="form-control">
+
+            {{-- Password --}}
+            <div>
+                <label for="password" class="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Password</label>
+                <input type="password" id="password" name="password" placeholder="Leave blank to keep current password"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                <p class="text-xs text-gray-500 mt-1">Leave empty if you don’t want to change the password.</p>
             </div>
-        </div>
-        <div class="col-xs-12 col-sm-12 col-md-12">
-            <div class="form-group">
-                <strong>Confirm Password:</strong>
-                <input type="password" name="confirm-password" placeholder="Confirm Password" class="form-control">
+
+            {{-- Confirm Password --}}
+            <div>
+                <label for="confirm-password" class="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Confirm Password</label>
+                <input type="password" id="confirm-password" name="confirm-password" placeholder="Re-enter new password"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
             </div>
-        </div>
-        <div class="col-xs-12 col-sm-12 col-md-12">
-            <div class="form-group">
-                <strong>Role:</strong>
-                <select name="roles[]" class="form-control" multiple="multiple">
+
+            {{-- Roles --}}
+            <div>
+                <label for="roles" class="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Assign Roles</label>
+                <select id="roles" name="roles[]" multiple
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
                     @foreach ($roles as $value => $label)
-                        <option value="{{ $value }}" {{ isset($userRole[$value]) ? 'selected' : ''}}>
+                        <option value="{{ $value }}" {{ isset($userRole[$value]) ? 'selected' : '' }}>
                             {{ $label }}
                         </option>
-                     @endforeach
+                    @endforeach
                 </select>
+                <p class="text-xs text-gray-500 mt-1">Hold <kbd>Ctrl</kbd> or <kbd>Cmd</kbd> to select multiple roles.</p>
             </div>
-        </div>
-        <div class="col-xs-12 col-sm-12 col-md-12 text-center">
-            <button type="submit" class="btn btn-primary btn-sm mt-2 mb-3"><i class="fa-solid fa-floppy-disk"></i> Submit</button>
-        </div>
-    </div>
-</form>
 
-<p class="text-center text-primary"><small>Powered By NsoftItSolutions</small></p>
+            {{-- Submit --}}
+            <div class="pt-4">
+                <button type="submit"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg shadow-md transition transform hover:-translate-y-0.5">
+                    <i class="fa-solid fa-floppy-disk mr-2"></i> Update User
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {{-- Footer --}}
+    <p class="text-center text-gray-500 dark:text-gray-400 text-sm mt-6">
+        Powered By <span class="font-semibold text-blue-600">NsoftItSolutions</span>
+    </p>
+</div>
 @endsection
