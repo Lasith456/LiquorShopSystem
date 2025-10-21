@@ -45,5 +45,5 @@
     </div>
 </form>
 
-<p class="text-center text-primary"><small>Tutorial by ItSolutionStuff.com</small></p>
+<p class="text-center text-primary"><small>Powered By NsoftItSolutions</small></p>
 @endsection
