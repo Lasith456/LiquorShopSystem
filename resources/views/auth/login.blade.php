@@ -1,150 +1,73 @@
 @extends('layouts.app')
 
 @section('content')
-<style>
-    body {
-        background: linear-gradient(135deg, #f8f9fa, #e3f2fd);
-        min-height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-
-    .login-card {
-        background: #fff;
-        border: none;
-        border-radius: 16px;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-        padding: 40px 30px;
-        width: 100%;
-        max-width: 600px;
-    }
-
-    .login-title {
-        font-weight: 700;
-        font-size: 28px;
-        text-align: center;
-        color: #0d6efd;
-        margin-bottom: 25px;
-    }
-
-    .form-control {
-        border-radius: 10px;
-        padding: 12px 15px;
-        font-size: 15px;
-    }
-
-    .btn-primary {
-        background: #0d6efd;
-        border: none;
-        border-radius: 10px;
-        width: 100%;
-        padding: 12px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-
-    .btn-primary:hover {
-        background: #0b5ed7;
-        transform: translateY(-1px);
-    }
-
-    .form-check-label {
-        font-size: 14px;
-    }
-
-    .forgot-password {
-        display: block;
-        text-align: right;
-        font-size: 14px;
-        margin-top: 10px;
-        color: #0d6efd;
-        text-decoration: none;
-    }
-
-    .forgot-password:hover {
-        text-decoration: underline;
-    }
-
-    .footer-text {
-        text-align: center;
-        font-size: 14px;
-        margin-top: 25px;
-        color: #6c757d;
-    }
-
-    .footer-text a {
-        color: #0d6efd;
-        text-decoration: none;
-        font-weight: 500;
-    }
-
-    .footer-text a:hover {
-        text-decoration: underline;
-    }
-</style>
-
-<div class="login-card">
-    <div class="login-title">Welcome Back 👋</div>
-
-    <form method="POST" action="{{ route('login') }}">
-        @csrf
-
-        {{-- Email Field --}}
-        <div class="mb-3">
-            <label for="email" class="form-label fw-semibold">Email address</label>
-            <input id="email" type="email" 
-                class="form-control @error('email') is-invalid @enderror" 
-                name="email" value="{{ old('email') }}" required autofocus 
-                placeholder="you@example.com">
-
-            @error('email')
-                <span class="invalid-feedback d-block" role="alert">
-                    <strong>{{ $message }}</strong>
-                </span>
-            @enderror
+<div class="min-h-screen flex items-center justify-center p-6">
+    <div class="bg-white/80 backdrop-blur-md shadow-xl rounded-2xl p-8 w-full max-w-md">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-blue-700">Welcome Back 👋</h1>
+            <p class="text-gray-500 text-sm mt-2">Login to your NSoftAdmin account</p>
         </div>
 
-        {{-- Password Field --}}
-        <div class="mb-3">
-            <label for="password" class="form-label fw-semibold">Password</label>
-            <input id="password" type="password" 
-                class="form-control @error('password') is-invalid @enderror" 
-                name="password" required placeholder="Enter your password">
+        <form method="POST" action="{{ route('login') }}" class="space-y-5">
+            @csrf
 
-            @error('password')
-                <span class="invalid-feedback d-block" role="alert">
-                    <strong>{{ $message }}</strong>
-                </span>
-            @enderror
+            {{-- Email Field --}}
+            <div>
+                <label for="email" class="block text-sm font-semibold text-gray-700 mb-1">Email Address</label>
+                <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus
+                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-800 placeholder-gray-400"
+                    placeholder="you@example.com">
+                @error('email')
+                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            {{-- Password Field --}}
+            <div>
+                <label for="password" class="block text-sm font-semibold text-gray-700 mb-1">Password</label>
+                <input id="password" type="password" name="password" required
+                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-800 placeholder-gray-400"
+                    placeholder="Enter your password">
+                @error('password')
+                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            {{-- Remember Me --}}
+            <div class="flex items-center justify-between">
+                <label class="flex items-center text-sm text-gray-600">
+                    <input type="checkbox" name="remember" id="remember"
+                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        {{ old('remember') ? 'checked' : '' }}>
+                    <span class="ml-2">Remember Me</span>
+                </label>
+                
+                @if (Route::has('password.request'))
+                    <a href="{{ route('password.request') }}" class="text-sm text-blue-600 hover:underline">
+                        Forgot Password?
+                    </a>
+                @endif
+            </div>
+
+            {{-- Submit Button --}}
+            <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg shadow-md transition transform hover:-translate-y-0.5">
+                Login
+            </button>
+        </form>
+
+        {{-- Divider --}}
+        <div class="mt-6 flex items-center justify-center">
+            <div class="border-t border-gray-300 w-1/3"></div>
+            <p class="text-gray-500 text-sm mx-3">or</p>
+            <div class="border-t border-gray-300 w-1/3"></div>
         </div>
 
-        {{-- Remember Me --}}
-        <div class="mb-3 form-check">
-            <input class="form-check-input" type="checkbox" name="remember" id="remember" 
-                {{ old('remember') ? 'checked' : '' }}>
-            <label class="form-check-label" for="remember">
-                Remember Me
-            </label>
-        </div>
-
-        {{-- Login Button --}}
-        <div class="mb-3">
-            <button type="submit" class="btn btn-primary">Login</button>
-        </div>
-
-        {{-- Forgot Password --}}
-        @if (Route::has('password.request'))
-            <a class="forgot-password" href="{{ route('password.request') }}">
-                Forgot your password?
-            </a>
-        @endif
-    </form>
-
-    {{-- Register Redirect --}}
-    <div class="footer-text">
-        Don’t have an account? 
-        <a href="{{ route('register') }}">Sign up here</a>
+        {{-- Register Redirect --}}
+        <p class="mt-6 text-center text-gray-600 text-sm">
+            Don’t have an account? 
+            <a href="{{ route('register') }}" class="text-blue-600 font-semibold hover:underline">Sign up here</a>
+        </p>
     </div>
 </div>
 @endsection

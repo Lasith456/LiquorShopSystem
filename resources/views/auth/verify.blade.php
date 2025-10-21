@@ -1,104 +1,47 @@
 @extends('layouts.app')
 
 @section('content')
-<style>
-    body {
-        background: linear-gradient(135deg, #f8f9fa, #e3f2fd);
-        min-height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-
-    .verify-card {
-        background: #fff;
-        border: none;
-        border-radius: 16px;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-        padding: 40px 30px;
-        width: 100%;
-        max-width: 480px;
-        text-align: center;
-    }
-
-    .verify-title {
-        font-weight: 700;
-        font-size: 26px;
-        color: #0d6efd;
-        margin-bottom: 15px;
-    }
-
-    .verify-text {
-        font-size: 15px;
-        color: #495057;
-        margin-bottom: 25px;
-        line-height: 1.6;
-    }
-
-    .btn-primary {
-        background: #0d6efd;
-        border: none;
-        border-radius: 10px;
-        padding: 12px 30px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-
-    .btn-primary:hover {
-        background: #0b5ed7;
-        transform: translateY(-1px);
-    }
-
-    .alert {
-        border-radius: 10px;
-        font-size: 14px;
-        margin-bottom: 20px;
-    }
-
-    .footer-note {
-        margin-top: 20px;
-        color: #6c757d;
-        font-size: 14px;
-    }
-
-    .footer-note a {
-        color: #0d6efd;
-        text-decoration: none;
-        font-weight: 500;
-    }
-
-    .footer-note a:hover {
-        text-decoration: underline;
-    }
-</style>
-
-<div class="verify-card">
-    <div class="verify-title">Verify Your Email ✉️</div>
-
-    @if (session('resent'))
-        <div class="alert alert-success" role="alert">
-            {{ __('A new verification link has been sent to your email address.') }}
+<div class="min-h-screen flex items-center justify-center p-6">
+    <div class="bg-white/80 backdrop-blur-md shadow-xl rounded-2xl p-8 w-full max-w-md text-center">
+        <div class="mb-6">
+            <h1 class="text-3xl font-extrabold text-blue-700">Verify Your Email ✉️</h1>
+            <p class="text-gray-500 text-sm mt-2">Let’s make sure your account is secure.</p>
         </div>
-    @endif
 
-    <div class="verify-text">
-        {{ __('Before continuing, please check your email for a verification link.') }}<br>
-        {{ __('If you did not receive the email, you can request another below.') }}
-    </div>
+        {{-- Success Message --}}
+        @if (session('resent'))
+            <div class="bg-green-100 border border-green-300 text-green-700 px-4 py-3 rounded-lg text-sm mb-5">
+                {{ __('A new verification link has been sent to your email address.') }}
+            </div>
+        @endif
 
-    <form method="POST" action="{{ route('verification.resend') }}">
-        @csrf
-        <button type="submit" class="btn btn-primary">
-            {{ __('Resend Verification Email') }}
-        </button>
-    </form>
+        {{-- Verification Instructions --}}
+        <p class="text-gray-600 text-sm leading-relaxed mb-6">
+            {{ __('Before continuing, please check your email for a verification link.') }}<br>
+            {{ __('If you did not receive the email, you can request another one below.') }}
+        </p>
 
-    <div class="footer-note mt-4">
-        <a href="{{ route('logout') }}"
-           onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
-            {{ __('Logout') }}
-        </a>
-        <form id="logout-form" action="{{ route('logout') }}" method="POST" class="d-none">@csrf</form>
+        {{-- Resend Button --}}
+        <form method="POST" action="{{ route('verification.resend') }}" class="mb-6">
+            @csrf
+            <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg shadow-md transition transform hover:-translate-y-0.5">
+                {{ __('Resend Verification Email') }}
+            </button>
+        </form>
+
+        {{-- Logout Option --}}
+        <p class="text-gray-500 text-sm">
+            <a href="{{ route('logout') }}"
+               onclick="event.preventDefault(); document.getElementById('logout-form').submit();"
+               class="text-blue-600 font-medium hover:underline">
+               {{ __('Logout') }}
+            </a>
+        </p>
+
+        <form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
+            @csrf
+        </form>
     </div>
 </div>
 @endsection
