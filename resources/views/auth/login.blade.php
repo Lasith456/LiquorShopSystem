@@ -5,7 +5,7 @@
     <div class="bg-white/80 backdrop-blur-md shadow-xl rounded-2xl p-8 w-full max-w-md">
         <div class="text-center mb-8">
             <h1 class="text-3xl font-extrabold text-blue-700">Welcome Back 👋</h1>
-            <p class="text-gray-500 text-sm mt-2">Login to your NSoftAdmin account</p>
+            <p class="text-gray-500 text-sm mt-2">Login to your NSoft account</p>
         </div>
 
         <form method="POST" action="{{ route('login') }}" class="space-y-5">

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name', 'NSoftAdmin') }}</title>
+    <title>{{ config('app.name', 'NsoftItSolutions') }}</title>
 
     {{-- ✅ Tailwind + Alpine --}}
     <script src="https://cdn.tailwindcss.com"></script>
@@ -55,7 +55,7 @@
                     {{-- Sidebar Content --}}
                     <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-900 px-6 pb-4 no-scrollbar">
                         <div class="flex h-16 items-center">
-                            <a href="/home" class="text-white font-bold text-lg">NSoftAdmin</a>
+                            <a href="/home" class="text-white font-bold text-lg">NSoft Stock Management</a>
                         </div>
                         @include('layouts.navigation')
                     </div>
@@ -73,7 +73,7 @@
             <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-900 px-4 pb-4 no-scrollbar">
                 <div class="flex h-16 items-center justify-between">
                     <a href="/home" class="text-white font-bold text-lg">
-                        <span x-show="!sidebarCollapsed || sidebarHover">NSoftAdmin</span>
+                        <span x-show="!sidebarCollapsed || sidebarHover">NSoftStock</span>
                         <span x-show="sidebarCollapsed && !sidebarHover">NS</span>
                     </a>
                 </div>

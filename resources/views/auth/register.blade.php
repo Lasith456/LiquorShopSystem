@@ -5,7 +5,7 @@
     <div class="bg-white/80 backdrop-blur-md shadow-xl rounded-2xl p-8 w-full max-w-md">
         <div class="text-center mb-8">
             <h1 class="text-3xl font-extrabold text-blue-700">Create Account ✨</h1>
-            <p class="text-gray-500 text-sm mt-2">Join the NSoftAdmin system</p>
+            <p class="text-gray-500 text-sm mt-2">Join the NSoft system</p>
         </div>
 
         <form method="POST" action="{{ route('register') }}" class="space-y-5">
