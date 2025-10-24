@@ -137,5 +137,13 @@
         </main>
     @endauth
 </div>
+<!-- ✅ Axios setup for CSRF -->
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script>
+    axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+    axios.defaults.headers.common['X-CSRF-TOKEN'] = 
+        document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+</script>
+
 </body>
 </html>
