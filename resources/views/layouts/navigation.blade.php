@@ -86,22 +86,61 @@
             </ul>
         </li>
 
-        {{-- REPORTS --}}
+        {{-- 📊 REPORTS --}}
         <li x-data="{ open: false }">
             <button @click="open = !open"
                 class="w-full flex items-center gap-x-3 rounded-md p-2 text-sm font-semibold text-left transition hover:bg-gray-800 hover:text-white">
                 <i class="fa-solid fa-chart-line h-5 w-5"></i>
                 <span x-show="!sidebarCollapsed || sidebarHover" class="whitespace-nowrap flex-1">Reports</span>
                 <i x-show="!sidebarCollapsed || sidebarHover" 
-                   :class="{'rotate-90': open}" 
-                   class="fa-solid fa-chevron-right text-xs transition-transform duration-300"></i>
+                :class="{'rotate-90': open}" 
+                class="fa-solid fa-chevron-right text-xs transition-transform duration-300"></i>
             </button>
 
+            {{-- Dropdown list --}}
             <ul x-show="open" x-collapse class="mt-1 px-2 space-y-1">
-                <li><a href="#" class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">Sales Report</a></li>
-                <li><a href="#" class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">Performance Report</a></li>
+
+                {{-- 📅 Day-wise Sales --}}
+                <li>
+                    <a href="{{ route('reports.daywise') }}"
+                    class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">
+                        📅 Day-wise Sales
+                    </a>
+                </li>
+
+                {{-- 📆 Monthly Sales --}}
+                <li>
+                    <a href="{{ route('reports.monthly') }}"
+                    class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">
+                        📆 Monthly Sales
+                    </a>
+                </li>
+
+                {{-- 🧾 Product-wise Sales --}}
+                <li>
+                    <a href="{{ route('reports.productwise') }}"
+                    class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">
+                        🧾 Product-wise Sales
+                    </a>
+                </li>
+
+                {{-- 📦 Stock Summary --}}
+                <li>
+                    <a href="{{ route('reports.stocksummary') }}"
+                    class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">
+                        📦 Stock Summary
+                    </a>
+                </li>
+                  {{-- 📦 Stock Added --}}
+                <li>
+                    <a href="{{ route('reports.stockadded') }}"
+                    class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">
+                        📦 Stock Added
+                    </a>
+                </li>
             </ul>
         </li>
+
 
         {{-- USERS --}}
         <li x-data="{ open: {{ request()->routeIs('users.*') || request()->routeIs('roles.*') ? 'true' : 'false' }} }">

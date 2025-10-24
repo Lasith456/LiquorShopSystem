@@ -41,7 +41,10 @@
                            class="w-full border-gray-300 rounded-md">
                     <ul x-show="filteredProducts.length > 0" class="absolute z-10 bg-white border rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
                         <template x-for="product in filteredProducts" :key="product.id">
-                            <li @click="selectProduct(product)" class="px-3 py-2 hover:bg-indigo-100 cursor-pointer" x-text="product.name"></li>
+                            <li @click="selectProduct(product)" class="px-3 py-2 hover:bg-indigo-100 cursor-pointer flex justify-between">
+                                <span x-text="product.name"></span>
+                                <span class="text-xs text-gray-500">(Stock: <span x-text="product.qty"></span>)</span>
+                            </li>
                         </template>
                     </ul>
                 </div>
@@ -123,7 +126,7 @@ function sellForm() {
         allProducts: @json($products),
         filteredProducts: [],
         addedProducts: [],
-        newItem: { id: '', name: '', qty: 1, price: 0 },
+        newItem: { id: '', name: '', qty: 1, price: 0, stock: 0 },
 
         filterProducts() {
             const query = this.searchQuery.toLowerCase();
@@ -136,17 +139,40 @@ function sellForm() {
         selectProduct(product) {
             this.newItem.id = product.id;
             this.newItem.name = product.name;
+            this.newItem.price = parseFloat(product.selling_price); // auto load from DB
+            this.newItem.stock = parseInt(product.qty);
             this.searchQuery = product.name;
             this.filteredProducts = [];
         },
 
         addProduct() {
-            if (!this.newItem.id || this.newItem.qty <= 0 || this.newItem.price <= 0) {
-                alert('Please fill all fields correctly.');
+            if (!this.newItem.id) {
+                alert('Please select a product.');
                 return;
             }
-            this.addedProducts.push({ ...this.newItem });
-            this.newItem = { id: '', name: '', qty: 1, price: 0 };
+            if (this.newItem.qty <= 0) {
+                alert('Quantity must be greater than zero.');
+                return;
+            }
+            if (this.newItem.qty > this.newItem.stock) {
+                alert(`Only ${this.newItem.stock} units available in stock.`);
+                return;
+            }
+            if (this.newItem.price <= 0) {
+                alert('Selling price must be greater than zero.');
+                return;
+            }
+
+            // Add or update product in list
+            const existing = this.addedProducts.findIndex(p => p.id === this.newItem.id);
+            if (existing !== -1) {
+                this.addedProducts[existing].qty += parseInt(this.newItem.qty);
+                this.addedProducts[existing].price = parseFloat(this.newItem.price);
+            } else {
+                this.addedProducts.push({ ...this.newItem });
+            }
+
+            this.newItem = { id: '', name: '', qty: 1, price: 0, stock: 0 };
             this.searchQuery = '';
         },
 
