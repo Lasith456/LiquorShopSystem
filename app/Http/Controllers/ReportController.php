@@ -9,6 +9,7 @@ use App\Models\Category;
 use App\Models\Sell;
 use App\Models\SellItem;
 use App\Models\StockItem;
+use App\Models\Bottle;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -724,6 +725,59 @@ class ReportController extends Controller
         });
 
         return Excel::download(new GenericExport($stockItems->toArray()), 'stock_added_report.xlsx');
+    }
+
+
+    /* =======================================================
+       🍾 6️⃣ EMPTY BOTTLE REPORT
+    ======================================================= */
+    public function bottleReport(Request $request): View
+    {
+        $startDate = $request->get('start_date') ?? now()->startOfMonth()->toDateString();
+        $endDate = $request->get('end_date') ?? now()->endOfMonth()->toDateString();
+
+        $bottles = Bottle::whereBetween('date', [$startDate, $endDate])
+            ->orderBy('date', 'desc')
+            ->get();
+
+        $totalValue = $bottles->sum('total_price');
+
+        return view('reports.bottles', compact('bottles', 'startDate', 'endDate', 'totalValue'));
+    }
+
+    public function exportBottlePDF(Request $request)
+    {
+        $startDate = $request->get('start_date') ?? now()->startOfMonth()->toDateString();
+        $endDate = $request->get('end_date') ?? now()->endOfMonth()->toDateString();
+
+        $bottles = Bottle::whereBetween('date', [$startDate, $endDate])
+            ->orderBy('date', 'desc')
+            ->get();
+
+        $totalValue = $bottles->sum('total_price');
+
+        $pdf = Pdf::loadView('reports.pdf.bottles', compact('bottles', 'startDate', 'endDate', 'totalValue'));
+        return $pdf->download('empty_bottle_report.pdf');
+    }
+
+    public function exportBottleExcel(Request $request)
+    {
+        $startDate = $request->get('start_date') ?? now()->startOfMonth()->toDateString();
+        $endDate = $request->get('end_date') ?? now()->endOfMonth()->toDateString();
+
+        $bottles = Bottle::whereBetween('date', [$startDate, $endDate])
+            ->orderBy('date', 'desc')
+            ->get()
+            ->map(function($b) {
+                return [
+                    'Date' => $b->date,
+                    'Quantity' => $b->quantity,
+                    'Price per Bottle' => $b->price_per_bottle,
+                    'Total Price' => $b->total_price,
+                ];
+            });
+
+        return Excel::download(new GenericExport($bottles->toArray()), 'empty_bottle_report.xlsx');
     }
     /* =======================================================
        📤 EXPORT HELPERS (for PDF / Excel)

@@ -81,6 +81,8 @@
                 <li><a href="{{ route('stocks.index') }}" class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">All Stocks</a></li>
                 <li><a href="{{ route('sells.create') }}" class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">Add Sell Stock</a></li>
                 <li><a href="{{ route('sells.index') }}" class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">All Sell Stocks</a></li>
+                <li><a href="{{ route('bottles.create') }}" class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">Return Bottle</a></li>
+                <li><a href="{{ route('bottles.index') }}" class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">Return All Bottles</a></li>
 
 
             </ul>
@@ -136,6 +138,13 @@
                     <a href="{{ route('reports.stockadded') }}"
                     class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">
                         📦 Stock Added
+                    </a>
+                </li>
+                {{-- 🍾 Bottle Return --}}
+                <li>
+                    <a href="{{ route('reports.bottles') }}"
+                    class="block rounded-md py-2 pl-9 pr-2 text-sm hover:bg-gray-800 hover:text-white">
+                        🍾 Bottles
                     </a>
                 </li>
             </ul>

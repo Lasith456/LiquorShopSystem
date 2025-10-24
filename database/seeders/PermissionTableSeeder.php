@@ -39,7 +39,10 @@ class PermissionTableSeeder extends Seeder
            'sell-list',
             'sell-create',
             'sell-delete',
-            'report-view'
+            'report-view',
+            'bottle-list',
+            'bottle-create',
+            'bottle-delete',
         ];
 
         foreach ($permissions as $permission) {
