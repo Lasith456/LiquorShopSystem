@@ -6,6 +6,7 @@ use App\Models\Stock;
 use App\Models\StockItem;
 use App\Models\Product;
 use App\Models\Category;
+use App\Models\Size;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
@@ -22,44 +23,51 @@ class StockController extends Controller
         $this->middleware('permission:stock-delete', ['only' => ['destroy']]);
     }
 
-    /**
-     * Display a listing of the stocks.
-     */
-    public function index(): View
+    /** 🧾 View all stock entries */
+    public function index(Request $request): View
     {
-        $stocks = Stock::with('user')
-            ->latest()
-            ->paginate(10);
+        $query = Stock::with('user');
 
-        return view('stocks.index', compact('stocks'))
-            ->with('i', (request()->input('page', 1) - 1) * 10);
+        if ($request->filled('search')) {
+            $query->where('reference_no', 'like', "%{$request->search}%");
+        }
+
+        if ($request->filled('from') && $request->filled('to')) {
+            $query->whereBetween('date', [$request->from, $request->to]);
+        } elseif ($request->filled('from')) {
+            $query->whereDate('date', '>=', $request->from);
+        } elseif ($request->filled('to')) {
+            $query->whereDate('date', '<=', $request->to);
+        }
+
+        $stocks = $query->latest()->paginate(10);
+        $i = (request()->input('page', 1) - 1) * 10;
+
+        return view('stocks.index', compact('stocks', 'i'));
     }
 
-    /**
-     * Show the form for creating a new stock entry.
-     */
+
+    /** 🏗️ Create form */
     public function create(): View
     {
+        $products = Product::with('sizes')->get();
         $categories = Category::all();
-        $products = Product::all();
-
         return view('stocks.create', compact('categories', 'products'));
     }
 
-    /**
-     * Store a new stock entry via Axios (AJAX).
-     */
+    /** 💾 Store new stock entry */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'items' => 'required|array|min:1',
-            'items.*.id' => 'required|exists:products,id',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.size_id' => 'nullable|exists:sizes,id',
             'items.*.qty' => 'required|integer|min:1',
-            'items.*.cost' => 'required|numeric|min:0',
+            'items.*.cost_price' => 'required|numeric|min:0',
         ]);
 
         $reference = 'STK-' . strtoupper(Str::random(6));
-        $totalValue = collect($request->items)->sum(fn($item) => $item['qty'] * $item['cost']);
+        $totalValue = collect($request->items)->sum(fn($item) => $item['qty'] * $item['cost_price']);
 
         $stock = Stock::create([
             'reference_no' => $reference,
@@ -69,55 +77,76 @@ class StockController extends Controller
         ]);
 
         foreach ($request->items as $item) {
+            // Save in stock_items table
             StockItem::create([
                 'stock_id' => $stock->id,
-                'product_id' => $item['id'],
+                'product_id' => $item['product_id'],
+                'size_id' => $item['size_id'] ?? null,
                 'qty' => $item['qty'],
-                'cost_price' => $item['cost'],
-                'total' => $item['qty'] * $item['cost'],
+                'cost_price' => $item['cost_price'],
+                'total' => $item['qty'] * $item['cost_price'],
             ]);
 
-            Product::where('id', $item['id'])->increment('qty', $item['qty']);
+            // 🧮 Update product total quantity
+            $product = Product::find($item['product_id']);
+            $product->increment('qty', $item['qty']);
+
+            // 📏 If size specified, update pivot table qty
+            if (!empty($item['size_id'])) {
+                $existing = $product->sizes()
+                    ->where('size_id', $item['size_id'])
+                    ->first();
+
+                if ($existing) {
+                    $newQty = $existing->pivot->qty + $item['qty'];
+                    $product->sizes()->updateExistingPivot($item['size_id'], [
+                        'qty' => $newQty,
+                        'selling_price' => $existing->pivot->selling_price ?? 0,
+                    ]);
+                } else {
+                    $product->sizes()->attach($item['size_id'], [
+                        'qty' => $item['qty'],
+                        'selling_price' => 0,
+                    ]);
+                }
+            }
         }
 
-        return response()->json(['success' => true, 'message' => 'Stock entry saved successfully!']);
+        return response()->json(['success' => true, 'message' => '✅ Stock added successfully!']);
     }
 
-    /**
-     * Display a single stock entry with products.
-     */
+    /** 🔍 View stock entry */
     public function show(Stock $stock): View
     {
-        $stock->load(['items.product', 'user']);
+        $stock->load(['items.product', 'items.size', 'user']);
         return view('stocks.show', compact('stock'));
     }
 
-    /**
-     * Remove a stock record.
-     */
+    /** 🗑️ Delete stock entry */
     public function destroy(Stock $stock): RedirectResponse
     {
-        // Load related items
         $stock->load('items');
 
-        // Loop through each stock item and reduce product quantity
         foreach ($stock->items as $item) {
             $product = $item->product;
             if ($product) {
-                // Decrease product quantity but ensure it doesn't go below zero
                 $newQty = max(0, $product->qty - $item->qty);
                 $product->update(['qty' => $newQty]);
-            }
 
-            // Delete the stock item
+                if ($item->size_id) {
+                    $pivot = $product->sizes()->where('size_id', $item->size_id)->first();
+                    if ($pivot) {
+                        $newSizeQty = max(0, $pivot->pivot->qty - $item->qty);
+                        $product->sizes()->updateExistingPivot($item->size_id, ['qty' => $newSizeQty]);
+                    }
+                }
+            }
             $item->delete();
         }
 
-        // Delete the stock record itself
         $stock->delete();
 
         return redirect()->route('stocks.index')
-            ->with('success', '🗑️ Stock deleted and product quantities adjusted successfully!');
+            ->with('success', '🗑️ Stock deleted and size quantities updated successfully!');
     }
-
 }

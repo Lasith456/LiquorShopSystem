@@ -10,7 +10,12 @@ class StockItem extends Model
     use HasFactory;
 
     protected $fillable = [
-        'stock_id', 'product_id', 'qty', 'cost_price', 'total'
+        'stock_id',
+        'product_id',
+        'size_id',
+        'qty',
+        'cost_price',
+        'total',
     ];
 
     public function product()
@@ -21,5 +26,10 @@ class StockItem extends Model
     public function stock()
     {
         return $this->belongsTo(Stock::class);
+    }
+
+    public function size()
+    {
+        return $this->belongsTo(Size::class);
     }
 }

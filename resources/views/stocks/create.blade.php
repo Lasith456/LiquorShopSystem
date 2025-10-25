@@ -6,7 +6,7 @@
 
         {{-- Header --}}
         <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
-            <h2 class="text-2xl font-semibold text-indigo-700">📦 Add New Stock</h2>
+            <h2 class="text-2xl font-semibold text-indigo-700">📦 Add New Stock (Size-wise)</h2>
             <a href="{{ route('stocks.index') }}" class="text-sm px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-800 transition">
                 <i class="fa fa-arrow-left mr-1"></i> Back
             </a>
@@ -22,7 +22,8 @@
                 {{-- Category Filter --}}
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-600 mb-1">Select Category</label>
-                    <select x-model="selectedCategory" @change="filterProducts" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <select x-model="selectedCategory" @change="filterProducts"
+                            class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                         <option value="">-- All Categories --</option>
                         @foreach ($categories as $category)
                             <option value="{{ $category->id }}">{{ $category->name }}</option>
@@ -47,16 +48,30 @@
                     </ul>
                 </div>
 
+                {{-- Size Dropdown (shows only when product selected) --}}
+                <template x-if="selectedProduct && selectedProduct.sizes.length > 0">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Select Size</label>
+                        <select x-model="newItem.size_id"
+                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="">-- Choose Size --</option>
+                            <template x-for="size in selectedProduct.sizes" :key="size.id">
+                                <option :value="size.id" x-text="size.label ?? size.name"></option>
+                            </template>
+                        </select>
+                    </div>
+                </template>
+
                 {{-- Quantity & Cost Price --}}
                 <div class="grid grid-cols-2 gap-4 mb-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-600 mb-1">Quantity</label>
-                        <input type="number" x-model="newItem.qty" min="1"
+                        <input type="number" x-model.number="newItem.qty" min="1"
                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-600 mb-1">Cost Price (LKR)</label>
-                        <input type="number" x-model="newItem.cost" min="0" step="0.01"
+                        <input type="number" x-model.number="newItem.cost_price" min="0" step="0.01"
                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                 </div>
@@ -81,6 +96,7 @@
                         <thead class="bg-indigo-600 text-white">
                             <tr>
                                 <th class="px-3 py-2 text-left">Product</th>
+                                <th class="px-3 py-2 text-left">Size</th>
                                 <th class="px-3 py-2 text-center">Qty</th>
                                 <th class="px-3 py-2 text-center">Cost</th>
                                 <th class="px-3 py-2 text-center">Total</th>
@@ -91,9 +107,10 @@
                             <template x-for="(item, index) in addedProducts" :key="index">
                                 <tr class="border-b hover:bg-gray-50">
                                     <td class="px-3 py-2" x-text="item.name"></td>
+                                    <td class="px-3 py-2 text-gray-600" x-text="item.size_label || '—'"></td>
                                     <td class="px-3 py-2 text-center" x-text="item.qty"></td>
-                                    <td class="px-3 py-2 text-center" x-text="item.cost.toFixed(2)"></td>
-                                    <td class="px-3 py-2 text-center" x-text="(item.qty * item.cost).toFixed(2)"></td>
+                                    <td class="px-3 py-2 text-center" x-text="item.cost_price.toFixed(2)"></td>
+                                    <td class="px-3 py-2 text-center" x-text="(item.qty * item.cost_price).toFixed(2)"></td>
                                     <td class="px-3 py-2 text-center">
                                         <button @click="removeProduct(index)" class="text-red-600 hover:text-red-800">
                                             <i class="fa fa-trash"></i>
@@ -105,7 +122,7 @@
                     </table>
 
                     <div class="text-right mt-4 font-semibold text-gray-700">
-                        Total Value: Rs. <span x-text="totalValue.toFixed(2)"></span>
+                        💰 Total Value: Rs. <span x-text="totalValue.toFixed(2)"></span>
                     </div>
 
                     {{-- Submit --}}
@@ -124,10 +141,11 @@ function stockForm() {
     return {
         selectedCategory: '',
         searchQuery: '',
-        allProducts: @json($products),  // full product list passed from controller
+        allProducts: @json($products),  // full product list passed from controller (with sizes)
         filteredProducts: [],
         addedProducts: [],
-        newItem: { id: '', name: '', qty: 1, cost: 0 },
+        selectedProduct: null,
+        newItem: { product_id: '', name: '', size_id: '', size_label: '', qty: 1, cost_price: 0 },
 
         filterProducts() {
             const query = this.searchQuery.toLowerCase();
@@ -138,19 +156,28 @@ function stockForm() {
         },
 
         selectProduct(product) {
-            this.newItem.id = product.id;
+            this.selectedProduct = product;
+            this.newItem.product_id = product.id;
             this.newItem.name = product.name;
             this.searchQuery = product.name;
             this.filteredProducts = [];
         },
 
         addProduct() {
-            if (!this.newItem.id || this.newItem.qty <= 0 || this.newItem.cost <= 0) {
-                alert('Please fill all fields properly.');
+            if (!this.newItem.product_id || this.newItem.qty <= 0 || this.newItem.cost_price <= 0) {
+                alert('⚠️ Please fill all fields properly.');
                 return;
             }
+
+            // Capture selected size label
+            if (this.newItem.size_id && this.selectedProduct) {
+                const size = this.selectedProduct.sizes.find(s => s.id == this.newItem.size_id);
+                this.newItem.size_label = size ? size.label ?? size.name : '';
+            }
+
             this.addedProducts.push({ ...this.newItem });
-            this.newItem = { id: '', name: '', qty: 1, cost: 0 };
+            this.newItem = { product_id: '', name: '', size_id: '', size_label: '', qty: 1, cost_price: 0 };
+            this.selectedProduct = null;
             this.searchQuery = '';
         },
 
@@ -159,28 +186,32 @@ function stockForm() {
         },
 
         get totalValue() {
-            return this.addedProducts.reduce((sum, item) => sum + (item.qty * item.cost), 0);
+            return this.addedProducts.reduce((sum, item) => sum + (item.qty * item.cost_price), 0);
         },
 
-submitForm() {
-    if (this.addedProducts.length === 0) {
-        alert('Add at least one product.');
-        return;
-    }
+        submitForm() {
+            if (this.addedProducts.length === 0) {
+                alert('⚠️ Add at least one product before saving.');
+                return;
+            }
 
-    axios.post("{{ route('stocks.store') }}", {
-        items: this.addedProducts
-    })
-    .then(response => {
-        alert('✅ Stock entry saved successfully!');
-        window.location.href = "{{ route('stocks.index') }}"; // redirect after success
-    })
-    .catch(error => {
-        console.error(error);
-        alert('❌ Failed to save stock entry. Check console for details.');
-    });
-}
-
+            axios.post("{{ route('stocks.store') }}", {
+                items: this.addedProducts.map(i => ({
+                    product_id: i.product_id,
+                    size_id: i.size_id,
+                    qty: i.qty,
+                    cost_price: i.cost_price
+                }))
+            })
+            .then(response => {
+                alert('✅ Stock entry saved successfully!');
+                window.location.href = "{{ route('stocks.index') }}";
+            })
+            .catch(error => {
+                console.error(error);
+                alert('❌ Failed to save stock entry. Check console for details.');
+            });
+        }
     }
 }
 </script>
