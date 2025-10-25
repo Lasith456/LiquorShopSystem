@@ -7,12 +7,12 @@ use App\Models\SellItem;
 use App\Models\Product;
 use App\Models\Category;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\View\View;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Http\JsonResponse;
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
 
 class SellController extends Controller
 {
@@ -23,23 +23,49 @@ class SellController extends Controller
         $this->middleware('permission:sell-delete', ['only' => ['destroy']]);
     }
 
-    public function index(): View
+    /**
+     * Display all sales
+     */
+    public function index(Request $request)
     {
-        $sells = Sell::with('user')->latest()->paginate(10);
+        $query = Sell::with('user')->latest();
+
+        // ✅ Apply date filter if provided
+        if ($request->filled('from') && $request->filled('to')) {
+            $query->whereBetween('date', [$request->from, $request->to]);
+        } elseif ($request->filled('from')) {
+            $query->whereDate('date', '>=', $request->from);
+        } elseif ($request->filled('to')) {
+            $query->whereDate('date', '<=', $request->to);
+        }
+
+        $sells = $query->paginate(10);
+
         return view('sells.index', compact('sells'))
             ->with('i', (request()->input('page', 1) - 1) * 10);
     }
 
-public function create(): View
-{
-    $categories = Category::all();
-    // Load each product with its category and all attached sizes
-    $products = Product::with(['category', 'sizes'])->get();
 
-    return view('sells.create', compact('categories', 'products'));
-}
+    /**
+     * Show the sale creation form
+     */
+    public function create(): View
+    {
+        $categories = Category::all();
 
+        // Load all products with their sizes and pivot fields
+        $products = Product::with([
+            'category:id,name',
+            'sizes' => function ($q) {
+                $q->select('sizes.id', 'sizes.label');
+            }
+        ])->get(['id', 'name', 'category_id', 'qty', 'selling_price']);
+        return view('sells.create', compact('categories', 'products'));
+    }
 
+    /**
+     * Store a new sale entry
+     */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -48,20 +74,16 @@ public function create(): View
             'items.*.id' => 'required|exists:products,id',
             'items.*.qty' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
+            'items.*.size_id' => 'nullable|exists:sizes,id',
         ]);
 
         DB::beginTransaction();
 
         try {
-            // Generate unique sale reference
             $reference = 'SEL-' . strtoupper(Str::random(6));
 
-            // Calculate total sale value
-            $totalValue = collect($validated['items'])->sum(function ($item) {
-                return $item['qty'] * $item['price'];
-            });
+            $totalValue = collect($validated['items'])->sum(fn($item) => $item['qty'] * $item['price']);
 
-            // Create main Sell record
             $sell = Sell::create([
                 'reference_no' => $reference,
                 'date' => $validated['date'],
@@ -69,31 +91,56 @@ public function create(): View
                 'user_id' => Auth::id(),
             ]);
 
-            // Process each sold item
             foreach ($validated['items'] as $item) {
                 $product = Product::findOrFail($item['id']);
+                $sizeId = $item['size_id'] ?? null;
 
-                // Check stock availability
-                if ($item['qty'] > $product->qty) {
-                    DB::rollBack();
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Insufficient stock for {$product->name}. Available: {$product->qty}"
-                    ], 400);
+                // Handle size-based stock decrement
+                if ($sizeId) {
+                    $pivot = DB::table('product_size')
+                        ->where('product_id', $product->id)
+                        ->where('size_id', $sizeId)
+                        ->first();
+
+                    if (!$pivot || $pivot->qty < $item['qty']) {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Insufficient stock for {$product->name} ({$sizeId})."
+                        ], 400);
+                    }
+
+                    // Decrease pivot stock
+                    DB::table('product_size')
+                        ->where('product_id', $product->id)
+                        ->where('size_id', $sizeId)
+                        ->update([
+                            'qty' => $pivot->qty - $item['qty'],
+                            'selling_price' => $item['price'], // update latest selling price
+                            'updated_at' => now(),
+                        ]);
+                } else {
+                    // No size: reduce product qty directly
+                    if ($product->qty < $item['qty']) {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Insufficient stock for {$product->name}."
+                        ], 400);
+                    }
+                    $product->decrement('qty', $item['qty']);
+                    $product->update(['selling_price' => $item['price']]);
                 }
 
-                // Create sale item
+                // Record sale item
                 SellItem::create([
                     'sell_id' => $sell->id,
                     'product_id' => $product->id,
+                    'size_id' => $sizeId,
                     'qty' => $item['qty'],
                     'selling_price' => $item['price'],
                     'total' => $item['qty'] * $item['price'],
                 ]);
-
-                // Update product stock and price
-                $product->decrement('qty', $item['qty']);
-                $product->update(['selling_price' => $item['price']]);
             }
 
             DB::commit();
@@ -113,13 +160,18 @@ public function create(): View
         }
     }
 
-
+    /**
+     * Show details of a single sale
+     */
     public function show(Sell $sell): View
     {
         $sell->load(['items.product', 'user']);
         return view('sells.show', compact('sell'));
     }
 
+    /**
+     * Delete a sale and restore stock
+     */
     public function destroy(Sell $sell): RedirectResponse
     {
         $sell->load('items.product');
@@ -127,15 +179,29 @@ public function create(): View
         foreach ($sell->items as $item) {
             $product = $item->product;
             if ($product) {
-                // Revert sold qty
-                $product->increment('qty', $item->qty);
+                if ($item->size_id) {
+                    $pivot = DB::table('product_size')
+                        ->where('product_id', $product->id)
+                        ->where('size_id', $item->size_id)
+                        ->first();
+
+                    if ($pivot) {
+                        DB::table('product_size')
+                            ->where('product_id', $product->id)
+                            ->where('size_id', $item->size_id)
+                            ->update(['qty' => $pivot->qty + $item->qty]);
+                    }
+                } else {
+                    $product->increment('qty', $item->qty);
+                }
             }
+
             $item->delete();
         }
 
         $sell->delete();
 
         return redirect()->route('sells.index')
-            ->with('success', 'Sell record deleted and quantities restored!');
+            ->with('success', 'Sale record deleted and stock restored successfully!');
     }
 }
