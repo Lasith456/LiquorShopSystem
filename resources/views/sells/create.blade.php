@@ -2,208 +2,171 @@
 
 @section('content')
 <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-    <div class="max-w-7xl mx-auto bg-white shadow-lg rounded-2xl overflow-hidden">
-        <div class="flex justify-between items-center px-6 py-4 border-b">
-            <h2 class="text-2xl font-semibold text-indigo-700">🛒 Record New Sale</h2>
-            <a href="{{ route('sells.index') }}" class="text-sm px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-800 transition">
-                <i class="fa fa-arrow-left mr-1"></i> Back
-            </a>
-        </div>
-
-        <div x-data="sellForm()" class="flex flex-col lg:flex-row divide-y lg:divide-x divide-gray-200">
-
-            {{-- LEFT SIDE --}}
-            <div class="w-full lg:w-1/2 p-6">
-                <h3 class="text-lg font-semibold text-gray-700 mb-4">🧾 Add Products Sold</h3>
-
-                {{-- Date --}}
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-600 mb-1">Sale Date</label>
-                    <input type="date" x-model="saleDate" class="w-full border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
-                </div>
-
-                {{-- Category Filter --}}
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-600 mb-1">Select Category</label>
-                    <select x-model="selectedCategory" @change="filterProducts" class="w-full border-gray-300 rounded-md">
-                        <option value="">-- All Categories --</option>
-                        @foreach ($categories as $category)
-                            <option value="{{ $category->id }}">{{ $category->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                {{-- Product Selector --}}
-                <div class="mb-4 relative">
-                    <label class="block text-sm font-medium text-gray-600 mb-1">Search Product</label>
-                    <input type="text" x-model="searchQuery" @input="filterProducts"
-                           placeholder="Type product name..."
-                           class="w-full border-gray-300 rounded-md">
-                    <ul x-show="filteredProducts.length > 0" class="absolute z-10 bg-white border rounded-md mt-1 w-full max-h-48 overflow-y-auto shadow-lg">
-                        <template x-for="product in filteredProducts" :key="product.id">
-                            <li @click="selectProduct(product)" class="px-3 py-2 hover:bg-indigo-100 cursor-pointer flex justify-between">
-                                <span x-text="product.name"></span>
-                                <span class="text-xs text-gray-500">(Stock: <span x-text="product.qty"></span>)</span>
-                            </li>
-                        </template>
-                    </ul>
-                </div>
-
-                {{-- Qty & Price --}}
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-600 mb-1">Quantity</label>
-                        <input type="number" x-model="newItem.qty" min="1"
-                               class="w-full border-gray-300 rounded-md">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-600 mb-1">Selling Price (LKR)</label>
-                        <input type="number" x-model="newItem.price" min="0" step="0.01"
-                               class="w-full border-gray-300 rounded-md">
-                    </div>
-                </div>
-
-                <button @click="addProduct" class="w-full py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
-                    <i class="fa fa-plus mr-1"></i> Add to Sale List
-                </button>
-            </div>
-
-            {{-- RIGHT SIDE --}}
-            <div class="w-full lg:w-1/2 p-6">
-                <h3 class="text-lg font-semibold text-gray-700 mb-4">📋 Products Sold</h3>
-
-                <template x-if="addedProducts.length === 0">
-                    <p class="text-gray-400 italic">No products added yet.</p>
-                </template>
-
-                <div class="overflow-x-auto mt-3" x-show="addedProducts.length > 0">
-                    <table class="min-w-full border text-sm">
-                        <thead class="bg-indigo-600 text-white">
-                            <tr>
-                                <th class="px-3 py-2 text-left">Product</th>
-                                <th class="px-3 py-2 text-center">Qty</th>
-                                <th class="px-3 py-2 text-center">Price</th>
-                                <th class="px-3 py-2 text-center">Total</th>
-                                <th class="px-3 py-2 text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template x-for="(item, index) in addedProducts" :key="index">
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-3 py-2" x-text="item.name"></td>
-                                    <td class="px-3 py-2 text-center" x-text="item.qty"></td>
-                                    <td class="px-3 py-2 text-center" x-text="item.price.toFixed(2)"></td>
-                                    <td class="px-3 py-2 text-center" x-text="(item.qty * item.price).toFixed(2)"></td>
-                                    <td class="px-3 py-2 text-center">
-                                        <button @click="removeProduct(index)" class="text-red-600 hover:text-red-800">
-                                            <i class="fa fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
-
-                    <div class="text-right mt-4 font-semibold text-gray-700">
-                        Total: Rs. <span x-text="totalValue.toFixed(2)"></span>
-                    </div>
-
-                    <button @click="submitForm" class="w-full mt-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-                        <i class="fa fa-save mr-1"></i> Save Sale Entry
-                    </button>
-                </div>
-            </div>
-        </div>
+  <div class="max-w-7xl mx-auto bg-white shadow-lg rounded-2xl overflow-hidden">
+    <div class="flex justify-between items-center px-6 py-4 border-b">
+      <h2 class="text-2xl font-semibold text-indigo-700">🛒 Record New Sale (Size-wise)</h2>
+      <a href="{{ route('sells.index') }}" class="text-sm px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-800 transition">
+        <i class="fa fa-arrow-left mr-1"></i> Back
+      </a>
     </div>
+
+    <div x-data="sellForm()" class="p-6">
+      {{-- Sale Date --}}
+      <div class="mb-5">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Sale Date</label>
+        <input type="date" x-model="saleDate" 
+               class="w-full border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+
+      {{-- Table --}}
+      <div class="overflow-x-auto bg-white rounded-md border border-gray-200">
+        <table class="min-w-full text-sm text-gray-700">
+          <thead class="bg-indigo-600 text-white">
+            <tr>
+              <th class="px-3 py-2 text-left">Product</th>
+              <th class="px-3 py-2 text-center">Category</th>
+              <th class="px-3 py-2 text-center">Size</th>
+              <th class="px-3 py-2 text-center">Current Stock</th>
+              <th class="px-3 py-2 text-center">Balance Stock</th>
+              <th class="px-3 py-2 text-center">Selling Price (LKR)</th>
+              <th class="px-3 py-2 text-center">Qty Sold</th>
+              <th class="px-3 py-2 text-right">Total (LKR)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(item, index) in productSizes" :key="item.uniqueKey">
+              <tr class="border-b hover:bg-gray-50">
+                <td class="px-3 py-2 font-medium" x-text="item.product_name"></td>
+                <td class="px-3 py-2 text-center" x-text="item.category_name ?? '-'"></td>
+                <td class="px-3 py-2 text-center text-gray-600" x-text="item.size_name ?? '-'"></td>
+                <td class="px-3 py-2 text-center font-semibold text-indigo-700" x-text="item.qty"></td>
+
+                {{-- Balance --}}
+                <td class="px-3 py-2 text-center">
+                  <input type="number" min="0" :max="item.qty"
+                         x-model.number="item.balance_stock"
+                         @input="updateSellQty(item)"
+                         class="w-24 border-gray-300 rounded-md text-center">
+                </td>
+
+                {{-- Price --}}
+                <td class="px-3 py-2 text-center">
+                  <input type="number" min="0" step="0.01"
+                         x-model.number="item.selling_price"
+                         @input="updateSellQty(item)"
+                         class="w-24 border-gray-300 rounded-md text-center">
+                </td>
+
+                <td class="px-3 py-2 text-center font-semibold text-indigo-700"
+                    x-text="item.sell_qty"></td>
+                <td class="px-3 py-2 text-right text-green-600 font-semibold"
+                    x-text="(item.sell_qty * item.selling_price).toFixed(2)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      {{-- Total --}}
+      <div class="text-right mt-6">
+        <p class="text-lg font-semibold text-gray-700">
+          💰 Total Sale Value: Rs. <span x-text="totalValue.toFixed(2)"></span>
+        </p>
+      </div>
+
+      {{-- Save --}}
+      <div class="mt-6 text-right">
+        <button @click="submitForm"
+                class="px-6 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 transition">
+          <i class="fa fa-save mr-1"></i> Save Sale Entry
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
 function sellForm() {
-    return {
-        saleDate: '',
-        selectedCategory: '',
-        searchQuery: '',
-        allProducts: @json($products),
-        filteredProducts: [],
-        addedProducts: [],
-        newItem: { id: '', name: '', qty: 1, price: 0, stock: 0 },
+  return {
+    saleDate: '',
+    rawProducts: @json($products),
 
-        filterProducts() {
-            const query = this.searchQuery.toLowerCase();
-            this.filteredProducts = this.allProducts.filter(p =>
-                (!this.selectedCategory || p.category_id == this.selectedCategory) &&
-                p.name.toLowerCase().includes(query)
-            );
-        },
-
-        selectProduct(product) {
-            this.newItem.id = product.id;
-            this.newItem.name = product.name;
-            this.newItem.price = parseFloat(product.selling_price); // auto load from DB
-            this.newItem.stock = parseInt(product.qty);
-            this.searchQuery = product.name;
-            this.filteredProducts = [];
-        },
-
-        addProduct() {
-            if (!this.newItem.id) {
-                alert('Please select a product.');
-                return;
-            }
-            if (this.newItem.qty <= 0) {
-                alert('Quantity must be greater than zero.');
-                return;
-            }
-            if (this.newItem.qty > this.newItem.stock) {
-                alert(`Only ${this.newItem.stock} units available in stock.`);
-                return;
-            }
-            if (this.newItem.price <= 0) {
-                alert('Selling price must be greater than zero.');
-                return;
-            }
-
-            // Add or update product in list
-            const existing = this.addedProducts.findIndex(p => p.id === this.newItem.id);
-            if (existing !== -1) {
-                this.addedProducts[existing].qty += parseInt(this.newItem.qty);
-                this.addedProducts[existing].price = parseFloat(this.newItem.price);
-            } else {
-                this.addedProducts.push({ ...this.newItem });
-            }
-
-            this.newItem = { id: '', name: '', qty: 1, price: 0, stock: 0 };
-            this.searchQuery = '';
-        },
-
-        removeProduct(index) {
-            this.addedProducts.splice(index, 1);
-        },
-
-        get totalValue() {
-            return this.addedProducts.reduce((sum, item) => sum + (item.qty * item.price), 0);
-        },
-
-        submitForm() {
-            if (!this.saleDate || this.addedProducts.length === 0) {
-                alert('Please select a date and add at least one product.');
-                return;
-            }
-
-            axios.post('{{ route('sells.store') }}', {
-                date: this.saleDate,
-                items: this.addedProducts
-            })
-            .then(res => {
-                alert(res.data.message);
-                window.location.href = "{{ route('sells.index') }}";
-            })
-            .catch(err => {
-                console.error(err);
-                alert('Error saving sale.');
-            });
+    // Flatten each product-size into rows
+    get productSizes() {
+      return this.rawProducts.flatMap(p => {
+        if (!p.sizes || p.sizes.length === 0) {
+          return [{
+            uniqueKey: `${p.id}-none`,
+            product_id: p.id,
+            product_name: p.name,
+            category_name: p.category?.name,
+            size_name: '-',
+            qty: p.qty ?? 0,
+            selling_price: parseFloat(p.selling_price ?? 0),
+            balance_stock: p.qty ?? 0,
+            sell_qty: 0,
+          }];
         }
+
+        return p.sizes.map(s => ({
+          uniqueKey: `${p.id}-${s.id}`,
+          product_id: p.id,
+          size_id: s.id,
+          product_name: p.name,
+          category_name: p.category?.name,
+          size_name: s.name, // ✅ show size name
+          qty: s.pivot?.qty ?? p.qty ?? 0, // if pivot qty exists, use that
+          selling_price: parseFloat(p.selling_price ?? 0),
+          balance_stock: s.pivot?.qty ?? p.qty ?? 0,
+          sell_qty: 0,
+        }));
+      });
+    },
+
+    updateSellQty(item) {
+      if (item.balance_stock < 0) item.balance_stock = 0;
+      if (item.balance_stock > item.qty) item.balance_stock = item.qty;
+      item.sell_qty = item.qty - item.balance_stock;
+      this.rawProducts = [...this.rawProducts]; // trigger Alpine reactivity
+    },
+
+    get totalValue() {
+      return this.productSizes.reduce((sum, i) => sum + (i.sell_qty * i.selling_price), 0);
+    },
+
+    submitForm() {
+      const selectedItems = this.productSizes
+        .filter(i => i.sell_qty > 0)
+        .map(i => ({
+          id: i.product_id,
+          size_id: i.size_id,
+          qty: i.sell_qty,
+          price: i.selling_price
+        }));
+
+      if (!this.saleDate) {
+        alert('Please select a sale date.');
+        return;
+      }
+      if (selectedItems.length === 0) {
+        alert('Enter balance stock to calculate sold qty.');
+        return;
+      }
+
+      axios.post('{{ route('sells.store') }}', {
+        date: this.saleDate,
+        items: selectedItems
+      })
+      .then(res => {
+        alert(res.data.message);
+        window.location.href = "{{ route('sells.index') }}";
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Error saving sale.');
+      });
     }
+  }
 }
 </script>
 @endsection

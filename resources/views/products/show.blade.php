@@ -2,7 +2,7 @@
 
 @section('content')
 <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 py-10 px-4">
-    <div class="bg-white shadow-lg rounded-2xl w-full max-w-3xl p-8">
+    <div class="bg-white shadow-lg rounded-2xl w-full max-w-4xl p-8">
         
         {{-- Header --}}
         <div class="flex justify-between items-center mb-6">
@@ -13,7 +13,7 @@
             </a>
         </div>
 
-        {{-- Product Info Card --}}
+        {{-- Product Info --}}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
             
             {{-- Product Name --}}
@@ -30,40 +30,48 @@
                 </p>
             </div>
 
-            {{-- Sizes --}}
+            {{-- Total Quantity --}}
             <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <p class="text-sm text-gray-500 font-semibold mb-1">Available Sizes</p>
-                @if ($product->sizes->count())
-                    <div class="flex flex-wrap gap-2">
-                        @foreach($product->sizes as $size)
-                            <span class="bg-indigo-100 text-indigo-700 text-sm px-3 py-1 rounded-full font-medium">
-                                {{ $size->label }}
-                            </span>
-                        @endforeach
-                    </div>
-                @else
-                    <p class="text-gray-500 text-sm">No sizes assigned.</p>
-                @endif
-            </div>
-
-            {{-- Quantity --}}
-            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <p class="text-sm text-gray-500 font-semibold">Quantity</p>
+                <p class="text-sm text-gray-500 font-semibold">Total Quantity</p>
                 <p class="text-lg font-bold text-gray-800">{{ $product->qty ?? 0 }}</p>
             </div>
 
-            {{-- Selling Price --}}
-            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 sm:col-span-2">
-                <p class="text-sm text-gray-500 font-semibold">Selling Price</p>
-                <p class="text-lg font-bold text-green-700">
-                    Rs. {{ number_format($product->selling_price ?? 0, 2) }}
-                </p>
+            {{-- Size-wise Table --}}
+            <div class="sm:col-span-2 bg-gray-50 p-5 rounded-lg border border-gray-200">
+                <p class="text-sm text-gray-500 font-semibold mb-3">Size-wise Stock & Price</p>
+
+                @if ($product->sizes->count())
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full border border-gray-200 text-sm text-gray-700">
+                            <thead class="bg-indigo-600 text-white">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Size</th>
+                                    <th class="px-3 py-2 text-center">Quantity</th>
+                                    <th class="px-3 py-2 text-center">Selling Price (LKR)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($product->sizes as $size)
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="px-3 py-2 font-medium">{{ $size->label ?? $size->name }}</td>
+                                        <td class="px-3 py-2 text-center">{{ $size->pivot->qty ?? 0 }}</td>
+                                        <td class="px-3 py-2 text-center text-green-700">
+                                            Rs. {{ number_format($size->pivot->selling_price ?? 0, 2) }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @else
+                    <p class="text-gray-500 text-sm italic">No sizes assigned.</p>
+                @endif
             </div>
 
             {{-- Description --}}
             <div class="sm:col-span-2 bg-gray-50 p-5 rounded-lg border border-gray-200">
                 <p class="text-sm text-gray-500 font-semibold mb-1">Description</p>
-                <p class="text-gray-700 leading-relaxed">{{ $product->detail }}</p>
+                <p class="text-gray-700 leading-relaxed">{{ $product->detail ?? 'No description available.' }}</p>
             </div>
 
             {{-- Created / Updated Info --}}

@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 
 class SellController extends Controller
 {
@@ -29,13 +30,15 @@ class SellController extends Controller
             ->with('i', (request()->input('page', 1) - 1) * 10);
     }
 
-    public function create(): View
-    {
-        $categories = Category::all();
-        $products = Product::all();
+public function create(): View
+{
+    $categories = Category::all();
+    // Load each product with its category and all attached sizes
+    $products = Product::with(['category', 'sizes'])->get();
 
-        return view('sells.create', compact('categories', 'products'));
-    }
+    return view('sells.create', compact('categories', 'products'));
+}
+
 
     public function store(Request $request): JsonResponse
     {
@@ -47,31 +50,69 @@ class SellController extends Controller
             'items.*.price' => 'required|numeric|min:0',
         ]);
 
-        $reference = 'SEL-' . strtoupper(Str::random(6));
-        $totalValue = collect($request->items)->sum(fn($item) => $item['qty'] * $item['price']);
+        DB::beginTransaction();
 
-        $sell = Sell::create([
-            'reference_no' => $reference,
-            'date' => $request->date,
-            'total_value' => $totalValue,
-            'user_id' => Auth::id(),
-        ]);
+        try {
+            // Generate unique sale reference
+            $reference = 'SEL-' . strtoupper(Str::random(6));
 
-        foreach ($request->items as $item) {
-            SellItem::create([
-                'sell_id' => $sell->id,
-                'product_id' => $item['id'],
-                'qty' => $item['qty'],
-                'selling_price' => $item['price'],
-                'total' => $item['qty'] * $item['price'],
+            // Calculate total sale value
+            $totalValue = collect($validated['items'])->sum(function ($item) {
+                return $item['qty'] * $item['price'];
+            });
+
+            // Create main Sell record
+            $sell = Sell::create([
+                'reference_no' => $reference,
+                'date' => $validated['date'],
+                'total_value' => $totalValue,
+                'user_id' => Auth::id(),
             ]);
 
-            // Decrease product quantity
-            Product::where('id', $item['id'])->decrement('qty', $item['qty']);
-        }
+            // Process each sold item
+            foreach ($validated['items'] as $item) {
+                $product = Product::findOrFail($item['id']);
 
-        return response()->json(['success' => true, 'message' => 'Sell entry saved successfully!']);
+                // Check stock availability
+                if ($item['qty'] > $product->qty) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Insufficient stock for {$product->name}. Available: {$product->qty}"
+                    ], 400);
+                }
+
+                // Create sale item
+                SellItem::create([
+                    'sell_id' => $sell->id,
+                    'product_id' => $product->id,
+                    'qty' => $item['qty'],
+                    'selling_price' => $item['price'],
+                    'total' => $item['qty'] * $item['price'],
+                ]);
+
+                // Update product stock and price
+                $product->decrement('qty', $item['qty']);
+                $product->update(['selling_price' => $item['price']]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sale recorded successfully!',
+                'reference_no' => $sell->reference_no,
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error saving sale: ' . $e->getMessage(),
+            ], 500);
+        }
     }
+
 
     public function show(Sell $sell): View
     {

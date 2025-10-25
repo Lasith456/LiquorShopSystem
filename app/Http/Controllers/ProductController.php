@@ -22,18 +22,25 @@ class ProductController extends Controller
     /**
      * Display a listing of the products.
      */
-    public function index(): View
+    public function index(Request $request): View
     {
-        // Fetch products with category & sizes eager loaded
-        $products = Product::with(['category', 'sizes'])
-            ->latest()
-            ->paginate(10);
+        $query = Product::with(['category', 'sizes']);
 
-        // Calculate index offset for pagination
+        if ($request->filled('search')) {
+            $query->where('name', 'like', "%{$request->search}%");
+        }
+
+        if ($request->filled('category')) {
+            $query->where('category_id', $request->category);
+        }
+
+        $products = $query->latest()->paginate(10);
+        $categories = Category::all();
         $i = (request()->input('page', 1) - 1) * 10;
 
-        return view('products.index', compact('products', 'i'));
+        return view('products.index', compact('products', 'i', 'categories'));
     }
+
 
     /**
      * Show the form for creating a new product.
@@ -47,27 +54,53 @@ class ProductController extends Controller
     }
 
     /**
-     * Store a newly created product in storage.
+     * Store a newly created product in storage (size-wise qty + price).
      */
     public function store(Request $request): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'detail' => 'nullable|string',
             'category_id' => 'required|exists:categories,id',
-            'qty' => 'required|numeric|min:0',
-            'selling_price' => 'required|numeric|min:0',
-            'sizes' => 'array',
+            'sizes' => 'required|array',
         ]);
 
-        $product = Product::create($request->only('name', 'detail', 'category_id', 'qty', 'selling_price'));
+        // Step 1: Create product
+        $product = Product::create([
+            'name' => $request->name,
+            'detail' => $request->detail,
+            'category_id' => $request->category_id,
+            'qty' => 0, // total qty across all sizes
+            'selling_price' => 0, // optional main price reference
+        ]);
 
-        // Attach selected sizes
-        if ($request->has('sizes')) {
-            $product->sizes()->attach($request->sizes);
+        // Step 2: Attach sizes with qty + selling_price
+        $syncData = [];
+        $totalQty = 0;
+
+        foreach ($request->sizes as $sizeId => $data) {
+            if (isset($data['checked']) && $data['checked'] == 1) {
+                $qty = isset($data['qty']) ? (int) $data['qty'] : 0;
+                $price = isset($data['selling_price']) ? (float) $data['selling_price'] : 0;
+                $totalQty += $qty;
+
+                $syncData[$sizeId] = [
+                    'qty' => $qty,
+                    'selling_price' => $price,
+                ];
+            }
         }
 
-        return redirect()->route('products.index')->with('success', '✅ Product created successfully.');
+        if (!empty($syncData)) {
+            $product->sizes()->sync($syncData);
+            $product->update([
+                'qty' => $totalQty,
+                'selling_price' => collect($syncData)->avg('selling_price') ?? 0, // optional average price
+            ]);
+        }
+
+        return redirect()->route('products.index')
+            ->with('success', '✅ Product created successfully with size-wise quantities and prices.');
     }
 
     /**
@@ -86,31 +119,60 @@ class ProductController extends Controller
     {
         $sizes = Size::all();
         $categories = Category::all();
-        $selectedSizes = $product->sizes->pluck('id')->toArray();
 
-        return view('products.edit', compact('product', 'sizes', 'categories', 'selectedSizes'));
+        // Load existing pivot data
+        $product->load('sizes');
+        $sizeQuantities = $product->sizes->pluck('pivot.qty', 'id')->toArray();
+        $sizePrices = $product->sizes->pluck('pivot.selling_price', 'id')->toArray();
+
+        return view('products.edit', compact('product', 'sizes', 'categories', 'sizeQuantities', 'sizePrices'));
     }
 
     /**
-     * Update the specified product in storage.
+     * Update the specified product in storage (size-wise qty + price).
      */
     public function update(Request $request, Product $product): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'detail' => 'nullable|string',
             'category_id' => 'required|exists:categories,id',
-            'qty' => 'required|numeric|min:0',
-            'selling_price' => 'required|numeric|min:0',
-            'sizes' => 'array',
+            'sizes' => 'required|array',
         ]);
 
-        $product->update($request->only('name', 'detail', 'category_id', 'qty', 'selling_price'));
+        // Step 1: Update main product info
+        $product->update([
+            'name' => $request->name,
+            'detail' => $request->detail,
+            'category_id' => $request->category_id,
+        ]);
 
-        // Sync sizes
-        $product->sizes()->sync($request->sizes ?? []);
+        // Step 2: Sync size-wise qty and price
+        $syncData = [];
+        $totalQty = 0;
 
-        return redirect()->route('products.index')->with('success', '✅ Product updated successfully.');
+        foreach ($request->sizes as $sizeId => $data) {
+            if (isset($data['checked']) && $data['checked'] == 1) {
+                $qty = isset($data['qty']) ? (int) $data['qty'] : 0;
+                $price = isset($data['selling_price']) ? (float) $data['selling_price'] : 0;
+                $totalQty += $qty;
+
+                $syncData[$sizeId] = [
+                    'qty' => $qty,
+                    'selling_price' => $price,
+                ];
+            }
+        }
+
+        $product->sizes()->sync($syncData);
+
+        $product->update([
+            'qty' => $totalQty,
+            'selling_price' => collect($syncData)->avg('selling_price') ?? 0,
+        ]);
+
+        return redirect()->route('products.index')
+            ->with('success', '✅ Product updated successfully with size-wise quantities and prices.');
     }
 
     /**
@@ -118,6 +180,7 @@ class ProductController extends Controller
      */
     public function destroy(Product $product): RedirectResponse
     {
+        $product->sizes()->detach();
         $product->delete();
 
         return redirect()->route('products.index')

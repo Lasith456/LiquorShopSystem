@@ -21,6 +21,10 @@ class Product extends Model
     // 🔥 Many-to-Many Relationship
     public function sizes()
     {
-        return $this->belongsToMany(Size::class, 'product_size')->withTimestamps();
+        return $this->belongsToMany(Size::class, 'product_size')
+            ->withPivot('qty', 'selling_price')
+            ->withTimestamps();
     }
+
+
 }
