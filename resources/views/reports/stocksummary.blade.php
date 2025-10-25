@@ -5,7 +5,7 @@
     {{-- 🏷️ Header --}}
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-3xl font-bold text-indigo-700 flex items-center gap-2">
-            📦 Current Stock Summary
+            📦 Current Stock Summary (Size-wise)
         </h2>
 
         {{-- 📤 Export Buttons --}}
@@ -25,7 +25,6 @@
     <form method="GET" action="{{ route('reports.stocksummary') }}" 
           class="bg-white shadow-sm border border-gray-200 rounded-lg p-4 mb-6 flex flex-wrap gap-3 items-end">
         
-        {{-- 📂 Category Filter --}}
         <div class="flex flex-col">
             <label class="text-sm text-gray-600 mb-1 font-medium">Category</label>
             <select name="category_id" 
@@ -39,7 +38,6 @@
             </select>
         </div>
 
-        {{-- 🔘 Action Buttons --}}
         <div class="flex gap-3 mt-5">
             <button type="submit" 
                 class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg shadow-md flex items-center gap-2 transition">
@@ -59,26 +57,30 @@
     <div class="overflow-x-auto rounded-lg shadow-lg border border-gray-200 bg-white backdrop-blur">
         <table class="w-full border-collapse text-sm">
             <thead>
-                <tr class="bg-gradient-to-r from-indigo-600 to-indigo-400 text-white text-left">
-                    <th class="py-3 px-4 rounded-tl-lg">Product</th>
+                <tr class="bg-gradient-to-r from-indigo-600 to-indigo-400 text-white">
+                    <th class="py-3 px-4 text-left">Product</th>
                     <th class="py-3 px-4 text-center">Category</th>
+                    <th class="py-3 px-4 text-center">Size</th>
                     <th class="py-3 px-4 text-center">Available Qty</th>
-                    <th class="py-3 px-4 text-right rounded-tr-lg">Selling Price (Rs)</th>
+                    <th class="py-3 px-4 text-right">Selling Price (Rs)</th>
                 </tr>
             </thead>
             <tbody>
-                @forelse ($stock as $p)
+                @forelse ($stock as $s)
                     <tr class="hover:bg-gray-50 border-b border-gray-200 transition">
-                        <td class="px-4 py-3 text-gray-700 font-medium">{{ $p->name }}</td>
-                        <td class="px-4 py-3 text-center text-gray-600">{{ $p->category->name ?? '-' }}</td>
-                        <td class="px-4 py-3 text-center text-gray-700 font-semibold">{{ $p->qty }}</td>
+                        <td class="px-4 py-3 text-gray-800 font-medium">{{ $s['product_name'] }}</td>
+                        <td class="px-4 py-3 text-center text-gray-600">{{ $s['category'] }}</td>
+                        <td class="px-4 py-3 text-center text-gray-700">{{ $s['size'] }}</td>
+                        <td class="px-4 py-3 text-center text-gray-800 font-semibold">{{ $s['qty'] }}</td>
                         <td class="px-4 py-3 text-right text-indigo-700 font-semibold">
-                            {{ number_format($p->selling_price, 2) }}
+                            {{ number_format($s['selling_price'], 2) }}
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="4" class="text-center py-6 text-gray-500">No data found for the selected filter.</td>
+                        <td colspan="5" class="text-center py-6 text-gray-500">
+                            No data found for the selected filter.
+                        </td>
                     </tr>
                 @endforelse
             </tbody>

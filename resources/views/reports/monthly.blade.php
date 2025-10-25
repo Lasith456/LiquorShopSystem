@@ -76,62 +76,78 @@
 </form>
 
 
-    {{-- 📊 Monthly Table --}}
-    <div class="overflow-x-auto rounded-lg shadow-lg border border-gray-200 bg-white backdrop-blur">
-        <table class="w-full border-collapse text-sm">
-            <thead>
-                <tr class="bg-gradient-to-r from-indigo-600 to-indigo-400 text-white text-left">
-                    <th class="py-3 px-4 rounded-tl-lg">Month</th>
-                    <th class="py-3 px-4 text-right">Total Sales (Rs)</th>
-                    <th class="py-3 px-4 text-right">Total Cost (Rs)</th>
-                    <th class="py-3 px-4 text-right rounded-tr-lg">Profit (Rs)</th>
-                </tr>
-            </thead>
-            <tbody>
-                @php
-                    $grandSales = $monthly->sum('total_sales');
-                    $grandCost = $monthly->sum('total_cost');
-                    $grandProfit = $monthly->sum('profit');
-                @endphp
+    {{-- 📊 Monthly Summary --}}
+    <div class="space-y-8">
+        @forelse ($monthly as $month)
+            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                {{-- 🗓️ Month Header --}}
+                <div class="bg-indigo-600 text-white px-6 py-3 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold">
+                        {{ \Carbon\Carbon::parse($month->month.'-01')->format('F Y') }}
+                    </h3>
+                    <p class="font-medium">
+                        Total Profit: 
+                        <span class="text-green-300 font-semibold">Rs. {{ number_format($month->profit, 2) }}</span>
+                    </p>
+                </div>
 
-                @forelse ($monthly as $data)
-                    <tr class="hover:bg-gray-50 border-b border-gray-200 transition">
-                        <td class="px-4 py-3 text-gray-700 font-medium">
-                            {{ \Carbon\Carbon::parse($data['month'].'-01')->format('F Y') }}
-                        </td>
-                        <td class="px-4 py-3 text-right text-gray-700">{{ number_format($data['total_sales'], 2) }}</td>
-                        <td class="px-4 py-3 text-right text-gray-700">{{ number_format($data['total_cost'], 2) }}</td>
-                        <td class="px-4 py-3 text-right text-green-700 font-semibold">
-                            {{ number_format($data['profit'], 2) }}
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="4" class="text-center py-6 text-gray-500">No records found for the selected filters.</td>
-                    </tr>
-                @endforelse
-
-                {{-- 🧮 Grand Totals --}}
-                @if($monthly->count() > 0)
-                <tr class="bg-indigo-100 font-bold border-t border-gray-300">
-                    <td class="px-4 py-3 text-right">TOTAL</td>
-                    <td class="px-4 py-3 text-right text-indigo-700">{{ number_format($grandSales, 2) }}</td>
-                    <td class="px-4 py-3 text-right text-indigo-700">{{ number_format($grandCost, 2) }}</td>
-                    <td class="px-4 py-3 text-right text-green-700">{{ number_format($grandProfit, 2) }}</td>
-                </tr>
-                @endif
-            </tbody>
-        </table>
+                {{-- 📦 Product Breakdown --}}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-100 text-gray-700">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Product (Size)</th>
+                                <th class="px-4 py-2 text-center">Qty</th>
+                                <th class="px-4 py-2 text-right">Selling Price (Rs)</th>
+                                <th class="px-4 py-2 text-right">Cost Price (Rs)</th>
+                                <th class="px-4 py-2 text-right">Total Sales (Rs)</th>
+                                <th class="px-4 py-2 text-right">Total Cost (Rs)</th>
+                                <th class="px-4 py-2 text-right">Profit (Rs)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            @foreach ($month->items as $item)
+                                @php
+                                    $totalSales = $item->qty * $item->selling_price;
+                                    $totalCost = $item->qty * ($item->latest_cost_price ?? 0);
+                                    $profit = $totalSales - $totalCost;
+                                @endphp
+                                <tr class="hover:bg-gray-50 transition">
+                                    <td class="px-4 py-2 font-medium text-gray-800">
+                                        {{ $item->product->name ?? '-' }}
+                                        <span class="text-gray-500 text-xs">({{ $item->size->label ?? '-' }})</span>
+                                    </td>
+                                    <td class="px-4 py-2 text-center">{{ $item->qty }}</td>
+                                    <td class="px-4 py-2 text-right">{{ number_format($item->selling_price, 2) }}</td>
+                                    <td class="px-4 py-2 text-right">{{ number_format($item->latest_cost_price ?? 0, 2) }}</td>
+                                    <td class="px-4 py-2 text-right">{{ number_format($totalSales, 2) }}</td>
+                                    <td class="px-4 py-2 text-right">{{ number_format($totalCost, 2) }}</td>
+                                    <td class="px-4 py-2 text-right font-semibold {{ $profit >= 0 ? 'text-green-600' : 'text-red-600' }}">
+                                        {{ number_format($profit, 2) }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                        {{-- 🧾 Monthly Totals --}}
+                        <tfoot class="bg-indigo-50 font-semibold text-gray-800">
+                            <tr>
+                                <td class="px-4 py-2 text-right">Monthly Total</td>
+                                <td class="px-4 py-2 text-center">—</td>
+                                <td class="px-4 py-2 text-right">—</td>
+                                <td class="px-4 py-2 text-right">—</td>
+                                <td class="px-4 py-2 text-right">{{ number_format($month->total_sales, 2) }}</td>
+                                <td class="px-4 py-2 text-right">{{ number_format($month->total_cost, 2) }}</td>
+                                <td class="px-4 py-2 text-right text-green-700">{{ number_format($month->profit, 2) }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        @empty
+            <div class="text-center text-gray-500 py-8 text-lg">
+                No records found for the selected filters.
+            </div>
+        @endforelse
     </div>
 </div>
-<script>
-document.querySelectorAll('input[type="month"]').forEach(el => {
-    // fallback: if browser doesn't support type="month", use type="text" with format hint
-    if (el.type !== 'month') {
-        el.type = 'text';
-        el.placeholder = 'YYYY-MM';
-        el.pattern = '\\d{4}-\\d{2}';
-    }
-});
-</script>
 @endsection

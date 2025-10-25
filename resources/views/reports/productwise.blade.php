@@ -72,47 +72,26 @@
                 <tr class="bg-gradient-to-r from-indigo-600 to-indigo-400 text-white">
                     <th class="py-3 px-4 text-left">Product</th>
                     <th class="py-3 px-4 text-left">Category</th>
+                    <th class="py-3 px-4 text-left">Size</th>
                     <th class="py-3 px-4 text-center">Qty Sold</th>
                     <th class="py-3 px-4 text-right">Total Sales (Rs)</th>
                     <th class="py-3 px-4 text-right">Total Cost (Rs)</th>
                     <th class="py-3 px-4 text-right">Profit (Rs)</th>
                 </tr>
             </thead>
-            <tbody>
-                @php
-                    $grandSales = 0;
-                    $grandCost = 0;
-                    $grandProfit = 0;
-                @endphp
 
-                @forelse ($productWise as $row)
-                    @php
-                        $grandSales += $row['total_sales'];
-                        $grandCost += $row['total_cost'];
-                        $grandProfit += $row['profit'];
-                    @endphp
+            <tbody>
+                @foreach ($productWise as $row)
                     <tr class="hover:bg-gray-50 border-b border-gray-200 transition">
-                        <td class="px-4 py-3 text-gray-700">{{ $row['product_name'] }}</td>
-                        <td class="px-4 py-3 text-gray-700">{{ $row['category'] }}</td>
-                        <td class="px-4 py-3 text-center text-gray-700">{{ $row['total_qty'] }}</td>
+                        <td class="px-4 py-3">{{ $row['product_name'] }}</td>
+                        <td class="px-4 py-3">{{ $row['category'] }}</td>
+                        <td class="px-4 py-3">{{ $row['size'] }}</td>
+                        <td class="px-4 py-3 text-center">{{ $row['total_qty'] }}</td>
                         <td class="px-4 py-3 text-right text-indigo-700">{{ number_format($row['total_sales'], 2) }}</td>
-                        <td class="px-4 py-3 text-right text-gray-700">{{ number_format($row['total_cost'], 2) }}</td>
+                        <td class="px-4 py-3 text-right">{{ number_format($row['total_cost'], 2) }}</td>
                         <td class="px-4 py-3 text-right text-green-700 font-semibold">{{ number_format($row['profit'], 2) }}</td>
                     </tr>
-                @empty
-                    <tr>
-                        <td colspan="6" class="text-center py-6 text-gray-500">No data found for selected filters.</td>
-                    </tr>
-                @endforelse
-
-                @if($productWise->count() > 0)
-                <tr class="bg-indigo-100 font-bold border-t border-gray-300">
-                    <td colspan="3" class="px-4 py-3 text-right">TOTAL</td>
-                    <td class="px-4 py-3 text-right text-indigo-700">{{ number_format($grandSales, 2) }}</td>
-                    <td class="px-4 py-3 text-right text-indigo-700">{{ number_format($grandCost, 2) }}</td>
-                    <td class="px-4 py-3 text-right text-green-700">{{ number_format($grandProfit, 2) }}</td>
-                </tr>
-                @endif
+                @endforeach
             </tbody>
         </table>
     </div>

@@ -31,54 +31,52 @@ class ReportController extends Controller
     {
         [$startDate, $endDate, $categoryId, $productId] = $this->getFilters($request);
 
-        // ✅ Preload latest cost prices to avoid multiple DB queries
-        $latestCosts = \App\Models\StockItem::select('product_id', \DB::raw('MAX(id) as max_id'))
-            ->groupBy('product_id')
+        // ✅ Get latest cost per (product_id, size_id) if tracked by size
+        $latestCosts = \App\Models\StockItem::select('product_id', 'size_id', \DB::raw('MAX(id) as max_id'))
+            ->groupBy('product_id', 'size_id')
             ->pluck('max_id', 'product_id');
 
         $costMap = \App\Models\StockItem::whereIn('id', $latestCosts)
-            ->pluck('cost_price', 'product_id');
+            ->get()
+            ->mapWithKeys(fn($i) => [($i->product_id . '-' . ($i->size_id ?? 0)) => $i->cost_price]);
 
-        // ✅ Fetch sell items with filters
-        $query = \App\Models\SellItem::with(['product.category', 'sell'])
+        // ✅ Load sells with products, sizes, categories
+        $query = \App\Models\SellItem::with(['product.category', 'size', 'sell'])
             ->whereHas('sell', fn($q) => $q->whereBetween('date', [$startDate, $endDate]));
 
         if ($categoryId) {
             $query->whereHas('product', fn($q) => $q->where('category_id', $categoryId));
         }
-
         if ($productId) {
             $query->where('product_id', $productId);
         }
 
         $sellItems = $query->get();
 
-        // ✅ Group day-wise with totals
+        // ✅ Group by day
         $dayWise = $sellItems->groupBy(fn($i) => \Carbon\Carbon::parse($i->sell->date)->format('Y-m-d'))
             ->map(function ($group, $day) use ($costMap) {
-                $totalSales = $group->sum(fn($i) => $i->qty * ($i->selling_price ?? 0));
-                $totalCost = $group->sum(function ($i) use ($costMap) {
-                    $cost = $costMap[$i->product_id] ?? 0;
-                    return $i->qty * $cost;
-                });
-                $profit = $totalSales - $totalCost;
+                $totalSales = 0;
+                $totalCost  = 0;
 
-                // attach latest cost for display
-                $group->each(function ($i) use ($costMap) {
-                    $i->latest_cost_price = $costMap[$i->product_id] ?? 0;
+                $group->each(function ($i) use (&$totalSales, &$totalCost, $costMap) {
+                    $costKey = $i->product_id . '-' . ($i->size_id ?? 0);
+                    $i->latest_cost_price = $costMap[$costKey] ?? 0;
+                    $i->profit = ($i->qty * $i->selling_price) - ($i->qty * $i->latest_cost_price);
+                    $totalSales += $i->qty * $i->selling_price;
+                    $totalCost  += $i->qty * $i->latest_cost_price;
                 });
 
-                return (object) [
-                    'day'          => $day,
-                    'total_sales'  => $totalSales,
-                    'total_cost'   => $totalCost,
-                    'profit'       => $profit,
-                    'items'        => $group,
+                return (object)[
+                    'day'         => $day,
+                    'total_sales' => $totalSales,
+                    'total_cost'  => $totalCost,
+                    'profit'      => $totalSales - $totalCost,
+                    'items'       => $group,
                 ];
             })
             ->values();
 
-        // ✅ MUST RETURN VIEW
         return view('reports.daywise', [
             'dayWise'   => $dayWise,
             'categories'=> \App\Models\Category::all(),
@@ -87,6 +85,7 @@ class ReportController extends Controller
             'endDate'   => $endDate,
         ]);
     }
+
     public function exportDaywisePDF(Request $request)
     {
         [$startDate, $endDate, $categoryId, $productId] = $this->getFilters($request);
@@ -213,7 +212,7 @@ class ReportController extends Controller
     /* =======================================================
        📆 2️⃣ MONTHLY SALES REPORT
     ======================================================= */
-    public function monthly(Request $request): View
+   public function monthly(Request $request): \Illuminate\View\View
     {
         $startDate = $request->input('start_date')
             ? Carbon::parse($request->input('start_date'))->startOfMonth()
@@ -223,39 +222,51 @@ class ReportController extends Controller
             ? Carbon::parse($request->input('end_date'))->endOfMonth()
             : Carbon::now()->endOfYear();
 
-        // 🧾 Fetch Sell Items within the range
-        $sellItems = SellItem::with(['product', 'sell'])
+        // 🧾 Fetch sell items (with product + size)
+        $sellItems = SellItem::with(['product.category', 'size', 'sell'])
             ->whereHas('sell', fn($q) => $q->whereBetween('date', [$startDate, $endDate]))
             ->get();
 
-        // 🧮 Group data month-wise
+        // 🧮 Load latest cost per product-size pair
+        $latestCosts = StockItem::select('product_id', 'size_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('product_id', 'size_id')
+            ->pluck('max_id', 'product_id');
+
+        $costMap = StockItem::whereIn('id', $latestCosts)
+            ->get()
+            ->mapWithKeys(fn($i) => [($i->product_id . '-' . ($i->size_id ?? 0)) => $i->cost_price]);
+
+        // 📆 Group month-wise
         $monthly = $sellItems
             ->groupBy(fn($i) => Carbon::parse($i->sell->date)->format('Y-m'))
-            ->map(function ($group) {
+            ->map(function ($group, $month) use ($costMap) {
                 $totalSales = 0;
                 $totalCost = 0;
 
-                foreach ($group as $item) {
+                // Compute cost and profit for each record
+                $group->each(function ($item) use (&$totalSales, &$totalCost, $costMap) {
+                    $key = $item->product_id . '-' . ($item->size_id ?? 0);
+                    $item->latest_cost_price = $costMap[$key] ?? 0;
+
                     $qty = $item->qty ?? 0;
-                    $sellingPrice = $item->selling_price ?? 0;
+                    $sellPrice = $item->selling_price ?? 0;
+                    $cost = $item->latest_cost_price ?? 0;
 
-                    // ✅ Get latest cost price from stock_items table
-                    $latestCost = StockItem::where('product_id', $item->product_id)
-                        ->orderByDesc('id')
-                        ->value('cost_price') ?? 0;
+                    $totalSales += $qty * $sellPrice;
+                    $totalCost += $qty * $cost;
+                    $item->profit = ($qty * $sellPrice) - ($qty * $cost);
+                });
 
-                    $totalSales += $qty * $sellingPrice;
-                    $totalCost += $qty * $latestCost;
-                }
-
-                return [
-                    'month' => Carbon::parse($group->first()->sell->date)->format('Y-m'),
+                return (object) [
+                    'month' => $month,
                     'total_sales' => $totalSales,
                     'total_cost' => $totalCost,
                     'profit' => $totalSales - $totalCost,
+                    'items' => $group,
                 ];
             })
-            ->sortKeys();
+            ->sortKeys()
+            ->values();
 
         return view('reports.monthly', [
             'monthly' => $monthly,
@@ -263,6 +274,7 @@ class ReportController extends Controller
             'endDate' => $endDate,
         ]);
     }
+
     public function exportMonthlyPDF(Request $request)
     {
         $startDate = $request->input('start_date')
@@ -273,50 +285,62 @@ class ReportController extends Controller
             ? Carbon::parse($request->input('end_date'))->endOfMonth()
             : Carbon::now()->endOfYear();
 
-        // 🧾 Fetch Sell Items within date range
-        $sellItems = SellItem::with(['product', 'sell'])
+        // 🧾 Fetch Sell Items within date range (with size)
+        $sellItems = SellItem::with(['product.category', 'size', 'sell'])
             ->whereHas('sell', fn($q) => $q->whereBetween('date', [$startDate, $endDate]))
             ->get();
 
-        // 🧮 Monthly group with cost, sales & profit
+        // 🧮 Load latest cost prices per product-size pair once
+        $latestCosts = StockItem::select('product_id', 'size_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('product_id', 'size_id')
+            ->pluck('max_id', 'product_id');
+
+        $costMap = StockItem::whereIn('id', $latestCosts)
+            ->get()
+            ->mapWithKeys(fn($i) => [($i->product_id . '-' . ($i->size_id ?? 0)) => $i->cost_price]);
+
+        // 🧮 Monthly grouping
         $monthly = $sellItems
             ->groupBy(fn($i) => Carbon::parse($i->sell->date)->format('Y-m'))
-            ->map(function ($group) {
+            ->map(function ($group, $month) use ($costMap) {
                 $totalSales = 0;
                 $totalCost = 0;
 
-                foreach ($group as $item) {
+                $group->each(function ($item) use (&$totalSales, &$totalCost, $costMap) {
+                    $key = $item->product_id . '-' . ($item->size_id ?? 0);
+                    $item->latest_cost_price = $costMap[$key] ?? 0;
+
                     $qty = $item->qty ?? 0;
-                    $sellingPrice = $item->selling_price ?? 0;
+                    $sell = $item->selling_price ?? 0;
+                    $cost = $item->latest_cost_price ?? 0;
 
-                    $latestCost = StockItem::where('product_id', $item->product_id)
-                        ->orderByDesc('id')
-                        ->value('cost_price') ?? 0;
+                    $totalSales += $qty * $sell;
+                    $totalCost += $qty * $cost;
+                    $item->profit = ($qty * $sell) - ($qty * $cost);
+                });
 
-                    $totalSales += $qty * $sellingPrice;
-                    $totalCost += $qty * $latestCost;
-                }
-
-                return [
-                    'month' => Carbon::parse($group->first()->sell->date)->format('Y-m'),
+                return (object)[
+                    'month' => $month,
                     'total_sales' => $totalSales,
                     'total_cost' => $totalCost,
                     'profit' => $totalSales - $totalCost,
+                    'items' => $group,
                 ];
             })
-            ->sortKeys();
+            ->sortKeys()
+            ->values();
 
-        // 🧾 Load the PDF view
+        // 🧾 Generate PDF (size-wise layout)
         $pdf = Pdf::loadView('reports.pdf.monthly', [
             'monthly' => $monthly,
             'startDate' => $startDate,
             'endDate' => $endDate,
         ])->setPaper('A4', 'portrait');
 
-        $filename = 'Monthly_Report_' . $startDate->format('Y_m') . '_to_' . $endDate->format('Y_m') . '.pdf';
-
-        return $pdf->download($filename);
+        $fileName = 'Monthly_Report_' . $startDate->format('Y_m') . '_to_' . $endDate->format('Y_m') . '.pdf';
+        return $pdf->download($fileName);
     }
+
     public function exportMonthlyExcel(Request $request)
     {
         $startDate = $request->input('start_date')
@@ -327,67 +351,88 @@ class ReportController extends Controller
             ? Carbon::parse($request->input('end_date'))->endOfMonth()
             : Carbon::now()->endOfYear();
 
-        // 🧾 Fetch Sell Items within date range
-        $sellItems = SellItem::with(['product', 'sell'])
+        // 🧾 Fetch Sell Items within range
+        $sellItems = SellItem::with(['product.category', 'size', 'sell'])
             ->whereHas('sell', fn($q) => $q->whereBetween('date', [$startDate, $endDate]))
             ->get();
 
-        // 🧮 Monthly group with cost, sales & profit
+        // 🧮 Load cost map once
+        $latestCosts = StockItem::select('product_id', 'size_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('product_id', 'size_id')
+            ->pluck('max_id', 'product_id');
+
+        $costMap = StockItem::whereIn('id', $latestCosts)
+            ->get()
+            ->mapWithKeys(fn($i) => [($i->product_id . '-' . ($i->size_id ?? 0)) => $i->cost_price]);
+
+        // 🧩 Group month-wise
         $monthly = $sellItems
             ->groupBy(fn($i) => Carbon::parse($i->sell->date)->format('Y-m'))
-            ->map(function ($group) {
+            ->map(function ($group, $month) use ($costMap) {
+                $rows = [];
                 $totalSales = 0;
                 $totalCost = 0;
 
                 foreach ($group as $item) {
+                    $key = $item->product_id . '-' . ($item->size_id ?? 0);
+                    $latestCost = $costMap[$key] ?? 0;
+
                     $qty = $item->qty ?? 0;
-                    $sellingPrice = $item->selling_price ?? 0;
+                    $selling = $item->selling_price ?? 0;
 
-                    $latestCost = StockItem::where('product_id', $item->product_id)
-                        ->orderByDesc('id')
-                        ->value('cost_price') ?? 0;
+                    $totalSale = $qty * $selling;
+                    $totalCostItem = $qty * $latestCost;
+                    $profit = $totalSale - $totalCostItem;
 
-                    $totalSales += $qty * $sellingPrice;
-                    $totalCost += $qty * $latestCost;
+                    $rows[] = [
+                        'Month'         => Carbon::parse($item->sell->date)->format('F Y'),
+                        'Category'      => $item->product->category->name ?? '-',
+                        'Product'       => $item->product->name ?? '-',
+                        'Size'          => $item->size->label ?? '-',
+                        'Quantity Sold' => $qty,
+                        'Selling Price' => number_format($selling, 2),
+                        'Cost Price'    => number_format($latestCost, 2),
+                        'Total Sales'   => number_format($totalSale, 2),
+                        'Total Cost'    => number_format($totalCostItem, 2),
+                        'Profit'        => number_format($profit, 2),
+                    ];
+
+                    $totalSales += $totalSale;
+                    $totalCost += $totalCostItem;
                 }
 
-                return [
-                    'month' => Carbon::parse($group->first()->sell->date)->format('F Y'),
-                    'total_sales' => $totalSales,
-                    'total_cost' => $totalCost,
-                    'profit' => $totalSales - $totalCost,
+                // Add subtotal row
+                $rows[] = [
+                    'Month' => 'Subtotal - ' . Carbon::parse($month . '-01')->format('F Y'),
+                    'Category' => '',
+                    'Product' => '',
+                    'Size' => '',
+                    'Quantity Sold' => '',
+                    'Selling Price' => '',
+                    'Cost Price' => '',
+                    'Total Sales' => number_format($totalSales, 2),
+                    'Total Cost' => number_format($totalCost, 2),
+                    'Profit' => number_format($totalSales - $totalCost, 2),
                 ];
+
+                return $rows;
             })
-            ->sortKeys();
+            ->flatten(1);
 
-        // ✅ Convert to Collection for Excel export
-        $exportData = new Collection([
-            ['Month', 'Total Sales (Rs)', 'Total Cost (Rs)', 'Profit (Rs)'],
-        ]);
-
-        foreach ($monthly as $row) {
-            $exportData->push([
-                $row['month'],
-                number_format($row['total_sales'], 2),
-                number_format($row['total_cost'], 2),
-                number_format($row['profit'], 2),
-            ]);
+        if ($monthly->isEmpty()) {
+            return back()->with('error', 'No records found for the selected filters.');
         }
 
-        // Add grand totals
-        $exportData->push([
-            'TOTAL',
-            number_format($monthly->sum('total_sales'), 2),
-            number_format($monthly->sum('total_cost'), 2),
-            number_format($monthly->sum('profit'), 2),
-        ]);
-
-        // ✅ Return Excel download
+        // ✅ Export to Excel
         $filename = 'Monthly_Report_' . $startDate->format('Y_m') . '_to_' . $endDate->format('Y_m') . '.xlsx';
-        return Excel::download(new class($exportData) implements \Maatwebsite\Excel\Concerns\FromCollection {
+
+        return Excel::download(new class($monthly) implements \Maatwebsite\Excel\Concerns\FromCollection, \Maatwebsite\Excel\Concerns\WithHeadings {
             private $data;
             public function __construct($data) { $this->data = $data; }
-            public function collection() { return $this->data; }
+            public function collection() { return collect($this->data); }
+            public function headings(): array {
+                return ['Month', 'Category', 'Product', 'Size', 'Quantity Sold', 'Selling Price', 'Cost Price', 'Total Sales', 'Total Cost', 'Profit'];
+            }
         }, $filename);
     }
 
@@ -396,7 +441,7 @@ class ReportController extends Controller
     /* =======================================================
        📦 3️⃣ PRODUCT-WISE SALES REPORT
     ======================================================= */
-    public function productwise(Request $request)
+   public function productwise(Request $request)
     {
         $startDate = $request->input('start_date')
             ? Carbon::parse($request->input('start_date'))->startOfDay()
@@ -409,7 +454,8 @@ class ReportController extends Controller
         $categoryId = $request->input('category_id');
         $productId = $request->input('product_id');
 
-        $query = SellItem::with(['product.category', 'sell'])
+        // 🔍 Base query
+        $query = SellItem::with(['product.category', 'size', 'sell'])
             ->whereHas('sell', fn($q) => $q->whereBetween('date', [$startDate, $endDate]));
 
         if ($categoryId) {
@@ -422,23 +468,33 @@ class ReportController extends Controller
 
         $sellItems = $query->get();
 
+        // ⚙️ Preload latest cost prices (avoid per-row queries)
+        $latestCosts = StockItem::select('product_id', 'size_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('product_id', 'size_id')
+            ->pluck('max_id', 'product_id');
+
+        $costMap = StockItem::whereIn('id', $latestCosts)
+            ->get()
+            ->mapWithKeys(fn($i) => [($i->product_id . '-' . ($i->size_id ?? 0)) => $i->cost_price]);
+
+        // 🧮 Group by product + size
         $productWise = $sellItems
-            ->groupBy('product_id')
-            ->map(function ($group) {
-                $product = $group->first()->product;
+            ->groupBy(fn($i) => $i->product_id . '-' . ($i->size_id ?? 0))
+            ->map(function ($group) use ($costMap) {
+                $item = $group->first();
+                $key = $item->product_id . '-' . ($item->size_id ?? 0);
+
                 $totalQty = $group->sum('qty');
                 $totalSales = $group->sum(fn($i) => $i->qty * ($i->selling_price ?? 0));
 
-                $latestCost = StockItem::where('product_id', $product->id)
-                    ->orderByDesc('id')
-                    ->value('cost_price') ?? 0;
-
+                $latestCost = $costMap[$key] ?? 0;
                 $totalCost = $totalQty * $latestCost;
                 $profit = $totalSales - $totalCost;
 
                 return [
-                    'product_name' => $product->name,
-                    'category' => $product->category->name ?? 'N/A',
+                    'product_name' => $item->product->name ?? '-',
+                    'category' => $item->product->category->name ?? '-',
+                    'size' => $item->size->label ?? '-',
                     'total_qty' => $totalQty,
                     'total_sales' => $totalSales,
                     'total_cost' => $totalCost,
@@ -449,7 +505,7 @@ class ReportController extends Controller
         return view('reports.productwise', [
             'productWise' => $productWise,
             'categories' => Category::all(),
-            'products' => Product::all(), // ✅ FIX: Add this line
+            'products' => Product::all(),
             'startDate' => $startDate,
             'endDate' => $endDate,
         ]);
@@ -467,7 +523,7 @@ class ReportController extends Controller
         $categoryId = $request->input('category_id');
         $productId = $request->input('product_id');
 
-        $query = SellItem::with(['product.category', 'sell'])
+        $query = SellItem::with(['product.category', 'size', 'sell'])
             ->whereHas('sell', fn($q) => $q->whereBetween('date', [$startDate, $endDate]));
 
         if ($categoryId) {
@@ -480,24 +536,32 @@ class ReportController extends Controller
 
         $sellItems = $query->get();
 
-        // 🧮 Group by product & calculate totals
+        // Preload latest costs once
+        $latestCosts = StockItem::select('product_id', 'size_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('product_id', 'size_id')
+            ->pluck('max_id', 'product_id');
+
+        $costMap = StockItem::whereIn('id', $latestCosts)
+            ->get()
+            ->mapWithKeys(fn($i) => [($i->product_id . '-' . ($i->size_id ?? 0)) => $i->cost_price]);
+
         $productWise = $sellItems
-            ->groupBy('product_id')
-            ->map(function ($group) {
-                $product = $group->first()->product;
+            ->groupBy(fn($i) => $i->product_id . '-' . ($i->size_id ?? 0))
+            ->map(function ($group) use ($costMap) {
+                $item = $group->first();
+                $key = $item->product_id . '-' . ($item->size_id ?? 0);
+
                 $totalQty = $group->sum('qty');
                 $totalSales = $group->sum(fn($i) => $i->qty * ($i->selling_price ?? 0));
 
-                $latestCost = StockItem::where('product_id', $product->id)
-                    ->orderByDesc('id')
-                    ->value('cost_price') ?? 0;
-
+                $latestCost = $costMap[$key] ?? 0;
                 $totalCost = $totalQty * $latestCost;
                 $profit = $totalSales - $totalCost;
 
                 return [
-                    'product_name' => $product->name,
-                    'category' => $product->category->name ?? 'N/A',
+                    'product_name' => $item->product->name ?? '-',
+                    'category' => $item->product->category->name ?? '-',
+                    'size' => $item->size->label ?? '-',
                     'total_qty' => $totalQty,
                     'total_sales' => $totalSales,
                     'total_cost' => $totalCost,
@@ -513,9 +577,8 @@ class ReportController extends Controller
             'product' => $productId ? Product::find($productId)?->name : 'All',
         ];
 
-        // 🧾 Load view and generate PDF
-        $pdf = PDF::loadView('reports.pdf.productwise', $data)
-            ->setPaper('a4', 'portrait');
+        $pdf = Pdf::loadView('reports.pdf.productwise', $data)
+            ->setPaper('A4', 'portrait');
 
         $filename = 'Productwise_Report_' . $startDate->format('Y_m_d') . '_to_' . $endDate->format('Y_m_d') . '.pdf';
         return $pdf->download($filename);
@@ -533,7 +596,7 @@ class ReportController extends Controller
         $categoryId = $request->input('category_id');
         $productId = $request->input('product_id');
 
-        $query = SellItem::with(['product.category', 'sell'])
+        $query = SellItem::with(['product.category', 'size', 'sell'])
             ->whereHas('sell', fn($q) => $q->whereBetween('date', [$startDate, $endDate]));
 
         if ($categoryId) {
@@ -546,24 +609,32 @@ class ReportController extends Controller
 
         $sellItems = $query->get();
 
-        // 🧮 Aggregate by product
+        // Preload cost map
+        $latestCosts = StockItem::select('product_id', 'size_id', DB::raw('MAX(id) as max_id'))
+            ->groupBy('product_id', 'size_id')
+            ->pluck('max_id', 'product_id');
+
+        $costMap = StockItem::whereIn('id', $latestCosts)
+            ->get()
+            ->mapWithKeys(fn($i) => [($i->product_id . '-' . ($i->size_id ?? 0)) => $i->cost_price]);
+
         $productWise = $sellItems
-            ->groupBy('product_id')
-            ->map(function ($group) {
-                $product = $group->first()->product;
+            ->groupBy(fn($i) => $i->product_id . '-' . ($i->size_id ?? 0))
+            ->map(function ($group) use ($costMap) {
+                $item = $group->first();
+                $key = $item->product_id . '-' . ($item->size_id ?? 0);
+
                 $totalQty = $group->sum('qty');
                 $totalSales = $group->sum(fn($i) => $i->qty * ($i->selling_price ?? 0));
 
-                $latestCost = StockItem::where('product_id', $product->id)
-                    ->orderByDesc('id')
-                    ->value('cost_price') ?? 0;
-
+                $latestCost = $costMap[$key] ?? 0;
                 $totalCost = $totalQty * $latestCost;
                 $profit = $totalSales - $totalCost;
 
                 return [
-                    'Product' => $product->name,
-                    'Category' => $product->category->name ?? 'N/A',
+                    'Product' => $item->product->name ?? '-',
+                    'Category' => $item->product->category->name ?? '-',
+                    'Size' => $item->size->label ?? '-',
                     'Quantity Sold' => $totalQty,
                     'Total Sales (Rs)' => $totalSales,
                     'Total Cost (Rs)' => $totalCost,
@@ -572,7 +643,6 @@ class ReportController extends Controller
             })
             ->values();
 
-        // 🧾 Export file
         $filename = 'Productwise_Report_' . $startDate->format('Y_m_d') . '_to_' . $endDate->format('Y_m_d') . '.xlsx';
 
         return Excel::download(new class($productWise) implements \Maatwebsite\Excel\Concerns\FromCollection, \Maatwebsite\Excel\Concerns\WithHeadings {
@@ -580,7 +650,7 @@ class ReportController extends Controller
             public function __construct($data) { $this->data = $data; }
             public function collection() { return new Collection($this->data); }
             public function headings(): array {
-                return ['Product', 'Category', 'Quantity Sold', 'Total Sales (Rs)', 'Total Cost (Rs)', 'Profit (Rs)'];
+                return ['Product', 'Category', 'Size', 'Quantity Sold', 'Total Sales (Rs)', 'Total Cost (Rs)', 'Profit (Rs)'];
             }
         }, $filename);
     }
@@ -590,72 +660,133 @@ class ReportController extends Controller
     /* =======================================================
        📊 4️⃣ STOCK SUMMARY REPORT
     ======================================================= */
-    public function stocksummary(Request $request)
+   public function stocksummary(Request $request)
     {
         $categories = Category::all();
 
-        $query = Product::with('category');
+        // 🧭 Base query with category and size
+        $query = Product::with(['category', 'sizes']);
 
-        // 🧭 Filter by category
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->category_id);
         }
 
-        $stock = $query->orderBy('name')->get();
+        $products = $query->orderBy('name')->get();
+
+        // 🧮 Flatten product-size data
+        $stock = $products->flatMap(function ($product) {
+            if ($product->sizes->isEmpty()) {
+                return [[
+                    'product_name' => $product->name,
+                    'category' => $product->category->name ?? '-',
+                    'size' => '-',
+                    'qty' => $product->qty ?? 0,
+                    'selling_price' => $product->selling_price ?? 0,
+                ]];
+            }
+
+            return $product->sizes->map(function ($size) use ($product) {
+                return [
+                    'product_name' => $product->name,
+                    'category' => $product->category->name ?? '-',
+                    'size' => $size->label ?? '-',
+                    'qty' => $size->pivot->qty ?? 0,
+                    'selling_price' => $size->pivot->selling_price ?? $product->selling_price ?? 0,
+                ];
+            });
+        });
 
         return view('reports.stocksummary', compact('categories', 'stock'));
     }
+
     public function exportStockPDF(Request $request)
     {
-        $categories = Category::all();
-
-        $query = Product::with('category');
+        $query = Product::with(['category', 'sizes']);
 
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->category_id);
         }
 
-        $stock = $query->orderBy('name')->get();
+        $products = $query->orderBy('name')->get();
 
         $categoryName = $request->filled('category_id')
             ? Category::find($request->category_id)?->name
             : 'All';
 
-        $pdf = PDF::loadView('reports.pdf.stocksummary', [
+        $stock = $products->flatMap(function ($product) {
+            if ($product->sizes->isEmpty()) {
+                return [[
+                    'product_name' => $product->name,
+                    'category' => $product->category->name ?? '-',
+                    'size' => '-',
+                    'qty' => $product->qty ?? 0,
+                    'selling_price' => $product->selling_price ?? 0,
+                ]];
+            }
+
+            return $product->sizes->map(function ($size) use ($product) {
+                return [
+                    'product_name' => $product->name,
+                    'category' => $product->category->name ?? '-',
+                    'size' => $size->label ?? '-',
+                    'qty' => $size->pivot->qty ?? 0,
+                    'selling_price' => $size->pivot->selling_price ?? $product->selling_price ?? 0,
+                ];
+            });
+        });
+
+        $pdf = Pdf::loadView('reports.pdf.stocksummary', [
             'stock' => $stock,
             'categoryName' => $categoryName,
-        ])->setPaper('a4', 'portrait');
+        ])->setPaper('A4', 'portrait');
 
         $filename = 'Stock_Summary_Report_' . now()->format('Y_m_d_His') . '.pdf';
         return $pdf->download($filename);
     }
+
     public function exportStockExcel(Request $request)
     {
-        $query = Product::with('category');
+        $query = Product::with(['category', 'sizes']);
 
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->category_id);
         }
 
-        $stock = $query->orderBy('name')->get();
+        $products = $query->orderBy('name')->get();
 
-        $data = $stock->map(function ($p) {
-            return [
-                'Product' => $p->name,
-                'Category' => $p->category->name ?? '-',
-                'Available Qty' => $p->qty,
-                'Selling Price (Rs)' => $p->selling_price,
-            ];
+        $data = $products->flatMap(function ($product) {
+            if ($product->sizes->isEmpty()) {
+                return [[
+                    'Product' => $product->name,
+                    'Category' => $product->category->name ?? '-',
+                    'Size' => '-',
+                    'Available Qty' => $product->qty ?? 0,
+                    'Selling Price (Rs)' => $product->selling_price ?? 0,
+                ]];
+            }
+
+            return $product->sizes->map(function ($size) use ($product) {
+                return [
+                    'Product' => $product->name,
+                    'Category' => $product->category->name ?? '-',
+                    'Size' => $size->label ?? '-',
+                    'Available Qty' => $size->pivot->qty ?? 0,
+                    'Selling Price (Rs)' => $size->pivot->selling_price ?? $product->selling_price ?? 0,
+                ];
+            });
         });
 
         $filename = 'Stock_Summary_Report_' . now()->format('Y_m_d_His') . '.xlsx';
 
-        return Excel::download(new class($data) implements \Maatwebsite\Excel\Concerns\FromCollection, \Maatwebsite\Excel\Concerns\WithHeadings {
+        return Excel::download(new class($data) implements 
+            \Maatwebsite\Excel\Concerns\FromCollection, 
+            \Maatwebsite\Excel\Concerns\WithHeadings 
+        {
             protected $data;
             public function __construct($data) { $this->data = $data; }
             public function collection() { return new Collection($this->data); }
             public function headings(): array {
-                return ['Product', 'Category', 'Available Qty', 'Selling Price (Rs)'];
+                return ['Product', 'Category', 'Size', 'Available Qty', 'Selling Price (Rs)'];
             }
         }, $filename);
     }
@@ -670,25 +801,36 @@ class ReportController extends Controller
     {
         [$startDate, $endDate, $categoryId, $productId] = $this->getFilters($request);
 
-        $query = StockItem::with(['product.category', 'stock' => fn($q) => $q->whereBetween('created_at', [$startDate, $endDate])]);
-        if ($categoryId) $query->whereHas('product', fn($q) => $q->where('category_id', $categoryId));
-        if ($productId) $query->where('product_id', $productId);
+        // 🔍 Fetch stock items with relations
+        $query = StockItem::with(['product.category', 'size', 'stock'])
+            ->whereHas('stock', fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]));
 
-        $stockItems = $query->get();
+        if ($categoryId) {
+            $query->whereHas('product', fn($q) => $q->where('category_id', $categoryId));
+        }
+
+        if ($productId) {
+            $query->where('product_id', $productId);
+        }
+
+        $stockItems = $query->orderByDesc('id')->get();
 
         return view('reports.stockadded', [
             'stockItems' => $stockItems,
             'categories' => Category::all(),
             'products' => Product::all(),
             'startDate' => $startDate,
-            'endDate' => $endDate
+            'endDate' => $endDate,
         ]);
     }
+
     public function exportStockaddedPDF(Request $request)
     {
         [$startDate, $endDate, $categoryId, $productId] = $this->getFilters($request);
 
-        $query = StockItem::with(['product.category', 'stock' => fn($q) => $q->whereBetween('created_at', [$startDate, $endDate])]);
+        $query = StockItem::with(['product.category', 'size', 'stock'])
+            ->whereHas('stock', fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]));
+
         if ($categoryId) $query->whereHas('product', fn($q) => $q->where('category_id', $categoryId));
         if ($productId) $query->where('product_id', $productId);
 
@@ -700,32 +842,51 @@ class ReportController extends Controller
             'startDate' => $startDate,
             'endDate' => $endDate,
             'totalCost' => $totalCost,
-        ]);
+            'category' => $categoryId ? Category::find($categoryId)?->name : 'All',
+            'product' => $productId ? Product::find($productId)?->name : 'All',
+        ])->setPaper('A4', 'portrait');
 
-        return $pdf->download('stock_added_report.pdf');
+        $filename = 'Stock_Added_Report_' . $startDate->format('Y_m_d') . '_to_' . $endDate->format('Y_m_d') . '.pdf';
+        return $pdf->download($filename);
     }
 
     public function exportStockaddedExcel(Request $request)
     {
         [$startDate, $endDate, $categoryId, $productId] = $this->getFilters($request);
 
-        $query = StockItem::with(['product.category', 'stock' => fn($q) => $q->whereBetween('created_at', [$startDate, $endDate])]);
+        $query = StockItem::with(['product.category', 'size', 'stock'])
+            ->whereHas('stock', fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]));
+
         if ($categoryId) $query->whereHas('product', fn($q) => $q->where('category_id', $categoryId));
         if ($productId) $query->where('product_id', $productId);
 
-        $stockItems = $query->get()->map(function($item){
+        $stockItems = $query->get()->map(function ($item) {
             return [
                 'Date' => $item->stock->created_at->format('Y-m-d'),
                 'Product' => $item->product->name ?? '-',
                 'Category' => $item->product->category->name ?? '-',
+                'Size' => $item->size->label ?? '-',
                 'Qty Added' => $item->qty,
-                'Cost Price' => $item->cost_price,
-                'Total Cost' => $item->total,
+                'Cost Price (Rs)' => $item->cost_price,
+                'Total Cost (Rs)' => $item->total,
             ];
         });
 
-        return Excel::download(new GenericExport($stockItems->toArray()), 'stock_added_report.xlsx');
+        $filename = 'Stock_Added_Report_' . now()->format('Y_m_d_His') . '.xlsx';
+
+        return Excel::download(new class($stockItems) implements 
+            \Maatwebsite\Excel\Concerns\FromCollection, 
+            \Maatwebsite\Excel\Concerns\WithHeadings 
+        {
+            protected $data;
+            public function __construct($data) { $this->data = $data; }
+            public function collection() { return new Collection($this->data); }
+            public function headings(): array {
+                return ['Date', 'Product', 'Category', 'Size', 'Qty Added', 'Cost Price (Rs)', 'Total Cost (Rs)'];
+            }
+        }, $filename);
     }
+
 
 
     /* =======================================================
